@@ -1,0 +1,272 @@
+{
+  "roles": [
+    {
+      "id_role": 1,
+      "nombre_rol": "Admin",
+      "id": "f2a0"
+    },
+    {
+      "id_role": 2,
+      "nombre_rol": "Estudiante",
+      "id": "a289"
+    },
+    {
+      "id_role": 3,
+      "nombre_rol": "Docente",
+      "id": "4b2d"
+    }
+  ],
+  "grados": [
+    {
+      "id_grado": 1,
+      "nombre": "1",
+      "id": "a75a"
+    },
+    {
+      "id_grado": 2,
+      "nombre": "2",
+      "id": "dba7"
+    },
+    {
+      "id_grado": 3,
+      "nombre": "3",
+      "id": "dd92"
+    },
+    {
+      "id_grado": 4,
+      "nombre": "4",
+      "id": "812e"
+    },
+    {
+      "id_grado": 5,
+      "nombre": "5",
+      "id": "aca6"
+    },
+    {
+      "id_grado": 6,
+      "nombre": "6",
+      "id": "7b3e"
+    }
+  ],
+  "usuarios": [
+    {
+      "id_usuario": 1,
+      "nombre": "Carlos",
+      "apellido": "Gómez",
+      "cedula": "123456789",
+      "email": "carlos@ejemplo.com",
+      "password": "hashedpassword123",
+      "id_role": 1,
+      "telefono": "3001234567",
+      "fecha_registro": "2024-01-15T10:30:00Z",
+      "id": "94f6"
+    },
+    {
+      "id_usuario": 2,
+      "nombre": "Ana",
+      "apellido": "Martínez",
+      "cedula": "987654321",
+      "email": "ana@ejemplo.com",
+      "password": "hashedpassword456",
+      "id_role": 2,
+      "telefono": "3109876543",
+      "fecha_registro": "2024-01-16T14:20:00Z",
+      "id": "f440"
+    },
+    {
+      "id_usuario": 3,
+      "nombre": "Diego Alexander",
+      "apellido": "Altamiranda Rodriguez",
+      "cedula": "30492032",
+      "email": "diegoaltamiranda22@gmail.com",
+      "password": "1234",
+      "id_role": 3,
+      "telefono": "02763429465",
+      "fecha_registro": "2025-12-29T18:10:26.390Z",
+      "id": "8b47"
+    }
+  ],
+  "docente": [
+    {
+      "id_docente": 1,
+      "id_usuario": 3,
+      "id": "55f3"
+    },
+    {
+      "id": "5ef8",
+      "id_usuario": "8b47"
+    }
+  ],
+  "docente_grados": [
+    {
+      "id_docente_grado": 1,
+      "id_docente": 1,
+      "id_grado": 5,
+      "id": "1bd4"
+    },
+    {
+      "id_docente_grado": 2,
+      "id_docente": 1,
+      "id_grado": 6,
+      "id": "9c75"
+    },
+    {
+      "id": "806e",
+      "id_docente": "5ef8",
+      "id_grado": 2
+    },
+    {
+      "id": "64dc",
+      "id_docente": "5ef8",
+      "id_grado": 3
+    }
+  ],
+  "estudiantes": [
+    {
+      "id_estudiante": 1,
+      "id_usuario": 2,
+      "id_grado": 5,
+      "id": "ee2c"
+    },
+    {
+      "id": "d6ec",
+      "id_usuario": "f440",
+      "id_grado": 5
+    }
+  ],
+  "contenidos": [
+    {
+      "id_contenido": 1,
+      "titulo": "Present Simple Tense",
+      "descripcion": "Aprende a usar el presente simple en inglés",
+      "tipo": "video",
+      "grado_objetivo": 5,
+      "archivo_url": "https://ejemplo.com/video1.mp4",
+      "archivo_nombre": "present_simple.mp4",
+      "archivo_tipo": "video/mp4",
+      "archivo_tamaño": 1024000,
+      "imagen_miniatura": "https://ejemplo.com/thumb1.jpg",
+      "fecha_creacion": "2024-01-20T09:00:00Z",
+      "id_docente": 1,
+      "id": "a985"
+    }
+  ],
+  "actividades": [
+    {
+      "id_actividad": 1,
+      "nombre": "Exercise: Present Simple",
+      "instrucciones": "Complete the sentences with the correct form",
+      "tipo": "quiz",
+      "fecha_vencimiento": "2024-02-15",
+      "id_contenido": 1,
+      "id": "efbc"
+    }
+  ],
+  "progreso_actividades": [
+    {
+      "id_progreso": 1,
+      "id_estudiante": 1,
+      "id_actividad": 1,
+      "completado": false,
+      "fecha_marcado": "2024-01-21T10:00:00Z",
+      "id": "2d8c"
+    }
+  ],
+  "evaluaciones": [
+    {
+      "id_evaluacion": 1,
+      "titulo": "Grammar Test 1",
+      "descripcion": "Test on basic grammar concepts",
+      "tipo_habilidad": "grammar",
+      "duracion_minutos": 45,
+      "fecha_disponible_hasta": "2024-02-28",
+      "activa": true,
+      "id_contenido": 1,
+      "id_docente": 1,
+      "id": "a111"
+    },
+    {
+      "id": "a4cb",
+      "titulo": "Números En Inglés",
+      "descripcion": "Dime los números en inglés",
+      "tipo_habilidad": "pronunciation",
+      "duracion_minutos": 30,
+      "fecha_disponible_hasta": "2025-12-30",
+      "activa": true,
+      "id_contenido": 1
+    }
+  ],
+  "preguntas": [
+    {
+      "id_pregunta": 1,
+      "id_evaluacion": 1,
+      "enunciado": "She _____ to school every day.",
+      "tipo_pregunta": "opcion_multiple",
+      "puntos": 1,
+      "orden": 1,
+      "id": "6283"
+    },
+    {
+      "id": "2eb7",
+      "enunciado": "¿Si?",
+      "tipo_pregunta": "audio_pronunciacion",
+      "puntos": 2,
+      "orden": 1
+    },
+    {
+      "id": "ea95",
+      "enunciado": "si",
+      "tipo_pregunta": "verdadero_falso",
+      "puntos": 2,
+      "orden": 2
+    }
+  ],
+  "opciones_pregunta": [
+    {
+      "id_opcion": 1,
+      "id_pregunta": 1,
+      "texto_opcion": "go",
+      "es_correcta": false,
+      "id": "264b"
+    },
+    {
+      "id_opcion": 2,
+      "id_pregunta": 1,
+      "texto_opcion": "goes",
+      "es_correcta": true,
+      "id": "9708"
+    },
+    {
+      "id": "a3a7",
+      "texto_opcion": "1",
+      "es_correcta": true
+    },
+    {
+      "id": "ae91",
+      "texto_opcion": "2",
+      "es_correcta": false
+    }
+  ],
+  "resultados_evaluaciones": [
+    {
+      "id_resultado": 1,
+      "id_estudiante": 1,
+      "id_evaluacion": 1,
+      "nota_final": 8.5,
+      "estado_revision": "completado",
+      "fecha_inicio": "2024-01-22T14:00:00Z",
+      "fecha_completado": "2024-01-22T14:45:00Z",
+      "id": "b48f"
+    }
+  ],
+  "respuestas_estudiantes": [
+    {
+      "id_respuesta": 1,
+      "id_resultado": 1,
+      "id_pregunta": 1,
+      "id_opcion_seleccionada": 2,
+      "puntos_obtenidos": 1,
+      "id": "4f52"
+    }
+  ]
+}

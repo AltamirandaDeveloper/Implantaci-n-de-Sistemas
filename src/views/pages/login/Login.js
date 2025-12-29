@@ -1,5 +1,5 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   CButton,
   CCard,
@@ -12,11 +12,62 @@ import {
   CInputGroup,
   CInputGroupText,
   CRow,
+  CSpinner,
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
 import { cilLockLocked, cilUser } from '@coreui/icons'
+import axios from 'axios'
+
+const API_URL = 'http://localhost:3001'
 
 const Login = () => {
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setError('')
+    setMessage('')
+    setLoading(true)
+
+    try {
+      // Buscar usuario por email
+      const res = await axios.get(`${API_URL}/usuarios?email=${email}`)
+      if (res.data.length === 0) {
+        setError('Credenciales inválidas')
+        setLoading(false)
+        return
+      }
+
+      const user = res.data[0]
+
+      // Validar contraseña
+      if (user.password !== password) {
+        setError('Credenciales inválidas')
+        setLoading(false)
+        return
+      }
+
+      // Login exitoso
+      localStorage.setItem('user', JSON.stringify(user))
+      setMessage('Iniciando sesión...')
+
+      // Pausa de 2 segundos antes de redirigir
+      setTimeout(() => {
+        navigate('/dashboard')
+      }, 2000)
+    } catch (err) {
+      console.error(err)
+      setError('Error al iniciar sesión')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="bg-body-tertiary min-vh-100 d-flex flex-row align-items-center">
       <CContainer>
@@ -25,29 +76,49 @@ const Login = () => {
             <CCardGroup>
               <CCard className="p-4">
                 <CCardBody>
-                  <CForm>
+                  <CForm onSubmit={handleLogin}>
                     <h1>Login</h1>
                     <p className="text-body-secondary">Sign In to your account</p>
+
+                    {error && <p className="text-danger">{error}</p>}
+                    {message && (
+                      <p className="text-success">
+                        {message} <CSpinner size="sm" />
+                      </p>
+                    )}
+
                     <CInputGroup className="mb-3">
                       <CInputGroupText>
                         <CIcon icon={cilUser} />
                       </CInputGroupText>
-                      <CFormInput placeholder="Username" autoComplete="username" />
+                      <CFormInput
+                        type="email"
+                        placeholder="Correo"
+                        autoComplete="username"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
                     </CInputGroup>
+
                     <CInputGroup className="mb-4">
                       <CInputGroupText>
                         <CIcon icon={cilLockLocked} />
                       </CInputGroupText>
                       <CFormInput
                         type="password"
-                        placeholder="Password"
+                        placeholder="Contraseña"
                         autoComplete="current-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
                       />
                     </CInputGroup>
+
                     <CRow>
                       <CCol xs={6}>
-                        <CButton color="primary" className="px-4">
-                          Login
+                        <CButton type="submit" color="primary" className="px-4" disabled={loading}>
+                          {loading ? 'Verificando...' : 'Login'}
                         </CButton>
                       </CCol>
                       <CCol xs={6} className="text-right">
@@ -67,11 +138,9 @@ const Login = () => {
                       Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod
                       tempor incididunt ut labore et dolore magna aliqua.
                     </p>
-                    <Link to="/register">
-                      <CButton color="primary" className="mt-3" active tabIndex={-1}>
-                        Register Now!
-                      </CButton>
-                    </Link>
+                    <CButton color="light" className="mt-3" onClick={() => navigate('/register')}>
+                      Register Now!
+                    </CButton>
                   </div>
                 </CCardBody>
               </CCard>

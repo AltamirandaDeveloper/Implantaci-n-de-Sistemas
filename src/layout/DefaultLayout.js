@@ -1,7 +1,20 @@
-import React from 'react'
-import { AppContent, AppSidebar, AppFooter, AppHeader } from '../components/index'
+import { useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import { AppContent, AppSidebar, AppFooter, AppHeader } from "../components/index"
 
 const DefaultLayout = () => {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    // Verificar autenticación
+    const token = localStorage.getItem('token')
+    const user = localStorage.getItem('user')
+    
+    if (!token || !user) {
+      navigate("/login")
+    }
+  }, [navigate])
+
   return (
     <div>
       <AppSidebar />
