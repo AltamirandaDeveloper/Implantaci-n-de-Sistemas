@@ -1,0 +1,378 @@
+/* src/views/pages/login/Login.css */
+
+.login-page {
+  min-height: 100vh;
+  background-color: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Imagen de fondo del colegio */
+.login-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('/imagenes/Fachada_colegio.jpeg');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed; /* Efecto parallax */
+  z-index: 0;
+  opacity: 0.7; /* Transparencia para mejor legibilidad */
+  filter: brightness(0.7) contrast(1.1); /* Mejorar visibilidad */
+}
+
+/* Overlay oscuro para mejorar contraste */
+.login-page::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.6) 50%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
+  z-index: 1;
+}
+
+.login-container {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 2; /* Sobre las capas de fondo */
+}
+
+/* Contenedor del monstruo */
+.monster-container {
+  position: relative;
+  height: 320px;
+  width: 320px;
+  margin-bottom: -120px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: none;
+}
+
+/* Efecto flotante para el monstruo */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+
+.monster-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: all 0.2s ease;
+  filter: 
+    drop-shadow(0 5px 15px rgba(0, 0, 0, 0.7))
+    drop-shadow(0 1px 3px rgba(255, 255, 255, 0.2));
+  transform-origin: bottom center;
+  animation: float 6s ease-in-out infinite;
+}
+
+.monster-image:hover {
+  animation: float 3s ease-in-out infinite;
+  filter: 
+    drop-shadow(0 8px 25px rgba(143, 71, 144, 0.5))
+    drop-shadow(0 2px 5px rgba(255, 255, 255, 0.3));
+}
+
+/* Formulario con fondo semitransparente */
+.login-form {
+  width: 420px;
+  position: relative;
+  background-color: rgba(255, 255, 255, 0.95); /* Fondo semitransparente */
+  border: 5px solid rgba(143, 71, 144, 0.9);
+  border-radius: 15px;
+  padding: 40px 60px 30px;
+  text-align: center;
+  z-index: 10;
+  box-shadow: 
+    0 15px 40px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  margin-top: 60px;
+  backdrop-filter: blur(5px); /* Efecto glassmorphism */
+}
+
+/* Espacio para el monstruo */
+.login-form::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: transparent;
+  z-index: -1;
+}
+
+/* Título del formulario */
+.login-form h2 {
+  color: #8f4790;
+  font-family: 'Bowlby One SC', cursive;
+  font-size: 24px;
+  margin-bottom: 25px;
+  margin-top: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.login-form label,
+.login-form input,
+.login-form button {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  font-family: 'Bowlby One SC', cursive;
+}
+
+.login-form label {
+  text-align: left;
+  color: #333;
+  font-size: 14px;
+  margin-top: 15px;
+  font-weight: normal;
+}
+
+.login-form input {
+  height: 45px;
+  border: 2px solid #8f4790;
+  border-radius: 10px;
+  padding: 0 15px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background-color: rgba(249, 249, 249, 0.9);
+  color: #333;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: #6b356c;
+  box-shadow: 0 0 0 3px rgba(143, 71, 144, 0.3);
+  background-color: #fff;
+}
+
+.login-form input::placeholder {
+  color: #999;
+  opacity: 0.8;
+}
+
+.login-form button {
+  margin-top: 25px;
+  cursor: pointer;
+  border: none;
+  height: 50px;
+  background: linear-gradient(145deg, #824283, #6b356c);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 16px;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: bold;
+}
+
+.login-form button:hover {
+  background: linear-gradient(145deg, #8f4790, #753776);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.login-form button:active {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+.login-form button:disabled {
+  background: linear-gradient(145deg, #a5a5a5, #8a8a8a);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Mensajes de estado con fondo más transparente */
+.alert {
+  padding: 12px 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-family: Arial, sans-serif;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(5px);
+}
+
+.alert-danger {
+  background-color: rgba(255, 238, 238, 0.95);
+  color: #c00;
+  border-left: 4px solid #c00;
+}
+
+.alert-success {
+  background-color: rgba(239, 255, 239, 0.95);
+  color: #090;
+  border-left: 4px solid #090;
+}
+
+/* Loading spinner */
+.spinner-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Efecto de sombra bajo el formulario */
+.login-form::after {
+  content: '';
+  position: absolute;
+  bottom: -15px;
+  left: 10px;
+  right: 10px;
+  height: 15px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  filter: blur(8px);
+  z-index: -1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .login-container {
+    padding: 15px;
+  }
+  
+  .login-form {
+    width: 90%;
+    max-width: 380px;
+    padding: 30px 40px 25px;
+    margin-top: 50px;
+    backdrop-filter: blur(3px);
+  }
+  
+  .monster-container {
+    height: 280px;
+    width: 280px;
+    margin-bottom: -100px;
+  }
+  
+  .login-form h2 {
+    font-size: 22px;
+    margin-top: 15px;
+  }
+  
+  /* Ajustar background para móviles */
+  .login-page::before {
+    background-attachment: scroll; /* Desactivar parallax en móviles */
+  }
+}
+
+@media (max-width: 480px) {
+  .login-form {
+    width: 95%;
+    padding: 25px 30px 20px;
+    margin-top: 40px;
+    border-width: 4px;
+  }
+  
+  .monster-container {
+    height: 240px;
+    width: 240px;
+    margin-bottom: -80px;
+  }
+  
+  .login-form h2 {
+    font-size: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .login-form input,
+  .login-form button {
+    height: 44px;
+    font-size: 15px;
+  }
+  
+  .login-form input {
+    padding: 0 12px;
+  }
+  
+  /* Ajustar opacidad para mejor legibilidad en móviles */
+  .login-page::before {
+    opacity: 0.3;
+  }
+  
+  .login-page::after {
+    background: linear-gradient(
+      135deg,
+      rgba(0, 0, 0, 0.85) 0%,
+      rgba(0, 0, 0, 0.7) 50%
+    );
+  }
+}
+
+/* Para pantallas muy grandes */
+@media (min-width: 1400px) {
+  .monster-container {
+    height: 350px;
+    width: 350px;
+    margin-bottom: -140px;
+  }
+  
+  .login-form {
+    width: 450px;
+    padding: 45px 70px 35px;
+    margin-top: 70px;
+  }
+  
+  /* Mejorar calidad de imagen en pantallas grandes */
+  .login-page::before {
+    background-size: cover;
+    background-position: center 30%; /* Enfocar mejor la fachada */
+  }
+}
+
+/* Ajustes específicos para la imagen 1020x765 */
+@media (min-width: 1024px) and (max-width: 1366px) {
+  .login-page::before {
+    background-position: center 40%; /* Ajustar para la proporción de la imagen */
+  }
+}
+
+/* Para asegurar que la imagen se vea bien en todas las proporciones */
+@media (max-aspect-ratio: 3/2) {
+  .login-page::before {
+    background-size: cover;
+    background-position: center top;
+  }
+}
+
+@media (min-aspect-ratio: 3/2) {
+  .login-page::before {
+    background-size: cover;
+    background-position: center center;
+  }
+}

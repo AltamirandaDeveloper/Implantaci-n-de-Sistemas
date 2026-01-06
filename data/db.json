@@ -74,16 +74,15 @@
       "id": "f440"
     },
     {
-      "id_usuario": 3,
+      "id": "8fb5",
       "nombre": "Diego Alexander",
       "apellido": "Altamiranda Rodriguez",
       "cedula": "30492032",
       "email": "diegoaltamiranda22@gmail.com",
-      "password": "1234",
-      "id_role": 3,
-      "telefono": "02763429465",
-      "fecha_registro": "2025-12-29T18:10:26.390Z",
-      "id": "8b47"
+      "password": "diego2004",
+      "telefono": "04247028764",
+      "id_role": 2,
+      "fecha_registro": "2026-01-06T01:06:20.679Z"
     }
   ],
   "docente": [
@@ -91,10 +90,6 @@
       "id_docente": 1,
       "id_usuario": 3,
       "id": "55f3"
-    },
-    {
-      "id": "5ef8",
-      "id_usuario": "8b47"
     }
   ],
   "docente_grados": [
@@ -109,16 +104,6 @@
       "id_docente": 1,
       "id_grado": 6,
       "id": "9c75"
-    },
-    {
-      "id": "806e",
-      "id_docente": "5ef8",
-      "id_grado": 2
-    },
-    {
-      "id": "64dc",
-      "id_docente": "5ef8",
-      "id_grado": 3
     }
   ],
   "estudiantes": [
@@ -132,6 +117,11 @@
       "id": "d6ec",
       "id_usuario": "f440",
       "id_grado": 5
+    },
+    {
+      "id": "bc2d",
+      "id_usuario": "8fb5",
+      "id_grado": 6
     }
   ],
   "contenidos": [
@@ -194,6 +184,17 @@
       "fecha_disponible_hasta": "2025-12-30",
       "activa": true,
       "id_contenido": 1
+    },
+    {
+      "id": "3c92",
+      "titulo": "Vocales en Inglés",
+      "descripcion": "Si",
+      "tipo_habilidad": "grammar",
+      "duracion_minutos": 2,
+      "fecha_disponible_hasta": "2026-01-14",
+      "activa": true,
+      "id_contenido": 1,
+      "id_evaluacion": 1767661529239
     }
   ],
   "preguntas": [

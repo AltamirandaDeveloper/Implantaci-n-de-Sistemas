@@ -1,153 +1,221 @@
+// src/views/pages/login/Login.js - AJUSTAR EL TÍTULO
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   CButton,
   CCard,
   CCardBody,
-  CCardGroup,
-  CCol,
-  CContainer,
   CForm,
   CFormInput,
-  CInputGroup,
-  CInputGroupText,
-  CRow,
   CSpinner,
+  CAlert
 } from '@coreui/react'
-import CIcon from '@coreui/icons-react'
-import { cilLockLocked, cilUser } from '@coreui/icons'
 import axios from 'axios'
+import AnimatedMonster from '../../../components/AnimatedMonster'
+import './Login.css'
 
 const API_URL = 'http://localhost:3001'
 
 const Login = () => {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  })
+  const [status, setStatus] = useState({
+    loading: false,
+    error: '',
+    success: ''
+  })
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false)
+  const [usernameLength, setUsernameLength] = useState(0)
 
-  const handleLogin = async (e) => {
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+    
+    if (name === 'email') {
+      setUsernameLength(value.length)
+    }
+  }
+
+  const handlePasswordFocus = () => {
+    setIsPasswordFocused(true)
+  }
+
+  const handlePasswordBlur = () => {
+    setIsPasswordFocused(false)
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    setError('')
-    setMessage('')
-    setLoading(true)
+    
+    if (!formData.email.trim() || !formData.password.trim()) {
+      setStatus({
+        ...status,
+        error: 'Por favor, completa todos los campos'
+      })
+      return
+    }
+
+    setStatus({
+      loading: true,
+      error: '',
+      success: ''
+    })
 
     try {
-      // Buscar usuario por email
-      const res = await axios.get(`${API_URL}/usuarios?email=${email}`)
-      if (res.data.length === 0) {
-        setError('Credenciales inválidas')
-        setLoading(false)
-        return
+      const response = await axios.get(`${API_URL}/usuarios`, {
+        params: {
+          email: formData.email.trim()
+        }
+      })
+
+      if (!response.data || response.data.length === 0) {
+        throw new Error('Credenciales inválidas')
       }
 
-      const user = res.data[0]
+      const user = response.data[0]
 
-      // Validar contraseña
-      if (user.password !== password) {
-        setError('Credenciales inválidas')
-        setLoading(false)
-        return
+      if (user.password !== formData.password) {
+        throw new Error('Credenciales inválidas')
       }
 
-      // Login exitoso
-      localStorage.setItem('user', JSON.stringify(user))
-      setMessage('Iniciando sesión...')
+      const userData = {
+        id: user.id,
+        email: user.email,
+        name: user.nombre || user.name || user.email.split('@')[0],
+        role: user.role || 'user'
+      }
 
-      // Pausa de 2 segundos antes de redirigir
+      localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.setItem('token', `auth-${user.id}-${Date.now()}`)
+
+      setStatus({
+        loading: false,
+        error: '',
+        success: '¡Inicio de sesión exitoso! Redirigiendo...'
+      })
+
       setTimeout(() => {
-        navigate('/dashboard')
-      }, 2000)
-    } catch (err) {
-      console.error(err)
-      setError('Error al iniciar sesión')
-    } finally {
-      setLoading(false)
+        navigate('/', { replace: true })
+      }, 1500)
+
+    } catch (error) {
+      let errorMessage = 'Error al iniciar sesión'
+      
+      if (error.response) {
+        errorMessage = error.response.status === 404 
+          ? 'Servicio no disponible' 
+          : `Error del servidor (${error.response.status})`
+      } else if (error.request) {
+        errorMessage = 'No se pudo conectar con el servidor'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
+      setStatus({
+        loading: false,
+        error: errorMessage,
+        success: ''
+      })
+      
+      setFormData(prev => ({ ...prev, password: '' }))
     }
   }
 
   return (
-    <div className="bg-body-tertiary min-vh-100 d-flex flex-row align-items-center">
-      <CContainer>
-        <CRow className="justify-content-center">
-          <CCol md={8}>
-            <CCardGroup>
-              <CCard className="p-4">
-                <CCardBody>
-                  <CForm onSubmit={handleLogin}>
-                    <h1>Login</h1>
-                    <p className="text-body-secondary">Sign In to your account</p>
+    <div className="login-page">
+      <div className="login-container">
+        {/* Monstruo animado - SE SUPERPONE AL FORMULARIO */}
+        <AnimatedMonster 
+          usernameLength={usernameLength}
+          isPasswordFocused={isPasswordFocused}
+        />
 
-                    {error && <p className="text-danger">{error}</p>}
-                    {message && (
-                      <p className="text-success">
-                        {message} <CSpinner size="sm" />
-                      </p>
-                    )}
+        {/* Formulario de login - CON MÁRGEN PARA EL MONSTRUO */}
+        <CCard className="login-form">
+          <CCardBody>
+            {/* Título más pequeño ya que el monstruo es el foco */}
+            <h2 className="text-center mb-4">
+              Plataforma de Inglés
+              Colegio San Juan Bautista
+            </h2>
 
-                    <CInputGroup className="mb-3">
-                      <CInputGroupText>
-                        <CIcon icon={cilUser} />
-                      </CInputGroupText>
-                      <CFormInput
-                        type="email"
-                        placeholder="Correo"
-                        autoComplete="username"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                      />
-                    </CInputGroup>
+            {status.error && (
+              <CAlert color="danger" className="mb-3">
+                {status.error}
+              </CAlert>
+            )}
 
-                    <CInputGroup className="mb-4">
-                      <CInputGroupText>
-                        <CIcon icon={cilLockLocked} />
-                      </CInputGroupText>
-                      <CFormInput
-                        type="password"
-                        placeholder="Contraseña"
-                        autoComplete="current-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                      />
-                    </CInputGroup>
+            {status.success && (
+              <CAlert color="success" className="mb-3 d-flex align-items-center">
+                <CSpinner size="sm" className="me-2" />
+                {status.success}
+              </CAlert>
+            )}
 
-                    <CRow>
-                      <CCol xs={6}>
-                        <CButton type="submit" color="primary" className="px-4" disabled={loading}>
-                          {loading ? 'Verificando...' : 'Login'}
-                        </CButton>
-                      </CCol>
-                      <CCol xs={6} className="text-right">
-                        <CButton color="link" className="px-0">
-                          Forgot password?
-                        </CButton>
-                      </CCol>
-                    </CRow>
-                  </CForm>
-                </CCardBody>
-              </CCard>
-              <CCard className="text-white bg-primary py-5" style={{ width: '44%' }}>
-                <CCardBody className="text-center">
-                  <div>
-                    <h2>Sign up</h2>
-                    <p>
-                      Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod
-                      tempor incididunt ut labore et dolore magna aliqua.
-                    </p>
-                    <CButton color="light" className="mt-3" onClick={() => navigate('/register')}>
-                      Register Now!
-                    </CButton>
-                  </div>
-                </CCardBody>
-              </CCard>
-            </CCardGroup>
-          </CCol>
-        </CRow>
-      </CContainer>
+            <CForm onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label htmlFor="email">Email</label>
+                <CFormInput
+                  type="email"
+                  name="email"
+                  id="input-usuario"
+                  placeholder="ejemplo@gmail.com"
+                  autoComplete="username"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  disabled={status.loading}
+                  className={status.error ? 'is-invalid' : ''}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="password">Contraseña</label>
+                <CFormInput
+                  type="password"
+                  name="password"
+                  id="input-clave"
+                  placeholder="********"
+                  autoComplete="current-password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  onFocus={handlePasswordFocus}
+                  onBlur={handlePasswordBlur}
+                  required
+                  disabled={status.loading}
+                  className={status.error ? 'is-invalid' : ''}
+                />
+              </div>
+
+              <div className="d-grid gap-2 mt-4">
+                <CButton 
+                  type="submit" 
+                  color="primary"
+                  disabled={status.loading}
+                  style={{
+                    backgroundColor: '#824283',
+                    borderColor: '#824283',
+                    fontFamily: "'Bowlby One SC', cursive"
+                  }}
+                >
+                  {status.loading ? (
+                    <div className="spinner-container">
+                      <CSpinner size="sm" className="me-2" />
+                      Procesando...
+                    </div>
+                  ) : 'ACCEDER'}
+                </CButton>
+              </div>
+            </CForm>
+          </CCardBody>
+        </CCard>
+      </div>
     </div>
   )
 }
