@@ -46,7 +46,29 @@ const AppSidebar = () => {
           onClick={() => dispatch({ type: 'set', sidebarShow: false })}
         />
       </CSidebarHeader>
-      <AppSidebarNav items={navigation} />
+      {/* Filtrar elementos del nav según rol del usuario (ocultar panel 'Usuarios' a estudiantes) */}
+      {(() => {
+        let userRole = null
+        try {
+          const stored = localStorage.getItem('user')
+          if (stored) {
+            const parsed = JSON.parse(stored)
+            userRole = Number(parsed.id_role ?? parsed.role ?? parsed.role_id ?? parsed.idRole)
+          }
+        } catch (e) {
+          userRole = null
+        }
+
+        const filtered = navigation.filter(item => {
+          // Si el item apunta a /users, solo mostrar para roles 1 (admin) y 3 (docente)
+          if (item.to === '/users') {
+            return userRole === 1 || userRole === 3
+          }
+          return true
+        })
+
+        return <AppSidebarNav items={filtered} />
+      })()}
       <CSidebarFooter className="border-top d-none d-lg-flex">
         <CSidebarToggler
           onClick={() => dispatch({ type: 'set', sidebarUnfoldable: !unfoldable })}

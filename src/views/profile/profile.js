@@ -30,9 +30,88 @@ const Profile = () => {
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
     if (storedUser) {
-      setUserInfo(JSON.parse(storedUser))
+      try {
+        const parsed = JSON.parse(storedUser)
+        // Normalize fields coming from different backends/localstorage shapes
+        const nombreRaw = parsed.nombre || parsed.name || parsed.fullName || parsed.nombre_completo || ''
+        const apellidoRaw = parsed.apellido || parsed.lastName || parsed.surname || ''
+        let nombre = nombreRaw
+        let apellido = apellidoRaw
+        // If only a full name was provided, try to split into nombre/apellido
+        if (!apellido && nombreRaw && nombreRaw.trim().includes(' ')) {
+          const parts = nombreRaw.trim().split(' ')
+          nombre = parts.shift()
+          apellido = parts.join(' ')
+        }
+        const roleField = parsed.id_role || parsed.idRole || parsed.role || parsed.role_id
+        const idRole = typeof roleField === 'string'
+          ? (roleField === 'student' ? 2 : roleField === 'docente' || roleField === 'teacher' ? 3 : roleField === 'admin' ? 1 : Number(roleField) || roleField)
+          : roleField
+
+        const normalized = {
+          id_usuario: parsed.id_usuario || parsed.id || parsed.userId || parsed.user_id,
+          nombre: nombre || '',
+          apellido: apellido || '',
+          email: parsed.email || parsed.emailAddress || parsed.mail || '',
+          telefono: parsed.telefono || parsed.phone || parsed.telefono_movil || '',
+          id_role: idRole,
+          password: parsed.password || parsed.pass || ''
+        }
+        setUserInfo(normalized)
+      } catch (e) {
+        console.error('Error parsing stored user', e)
+      }
     }
   }, [])
+
+    // Helper: update user on server and return merged record (or throw)
+    const updateUserOnServer = async (updated) => {
+      const apiBase = 'http://localhost:3001/usuarios'
+      // Prefer `id` (resource id) then try `id_usuario` query
+      const resourceId = updated.id || updated.id_usuario
+      try {
+        if (resourceId) {
+          // Try PATCH by id
+          const res = await fetch(`${apiBase}/${resourceId}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated)
+          })
+          if (res.ok) return await res.json()
+        }
+      } catch (e) {
+        // ignore and try query by id_usuario below
+      }
+
+      // If we reach here, try to find by id_usuario query and PATCH that record
+      try {
+        if (updated.id_usuario) {
+          const q = await fetch(`${apiBase}?id_usuario=${updated.id_usuario}`)
+          const arr = await q.json()
+          if (Array.isArray(arr) && arr.length > 0) {
+            const record = arr[0]
+            const res2 = await fetch(`${apiBase}/${record.id}`, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated)
+            })
+            if (res2.ok) return await res2.json()
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // Last resort: try PUT to /usuarios/:id_usuario (some setups)
+      try {
+        if (updated.id_usuario) {
+          const res3 = await fetch(`${apiBase}/${updated.id_usuario}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated)
+          })
+          if (res3.ok) return await res3.json()
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      throw new Error('No se pudo actualizar el usuario en el servidor')
+    }
 
   const openEditModal = () => {
     setEditInfo({
@@ -52,12 +131,20 @@ const Profile = () => {
     if (!editInfo.email) errors.email = 'Email requerido'
     setFormErrors(errors)
     if (Object.keys(errors).length > 0) return
-
-    const updatedUser = { ...userInfo, ...editInfo }
-    localStorage.setItem('user', JSON.stringify(updatedUser))
-    setUserInfo(updatedUser)
-    setShowEditModal(false)
-    setSuccessMessage('Información actualizada correctamente')
+    ;(async () => {
+      const updatedUser = { ...userInfo, ...editInfo }
+      try {
+        const serverUser = await updateUserOnServer(updatedUser)
+        const merged = { ...updatedUser, ...serverUser }
+        try { localStorage.setItem('user', JSON.stringify(merged)) } catch (e) { /* ignore */ }
+        setUserInfo(merged)
+        setShowEditModal(false)
+        setSuccessMessage('Información actualizada correctamente')
+      } catch (e) {
+        console.error(e)
+        setFormErrors({ form: 'No se pudo actualizar en el servidor. Intenta de nuevo.' })
+      }
+    })()
   }
 
   const handleChangePassword = () => {
@@ -72,13 +159,21 @@ const Profile = () => {
       setFormErrors({ current: 'Contraseña actual incorrecta' })
       return
     }
-
-    const updatedUser = { ...userInfo, password: password.new }
-    localStorage.setItem('user', JSON.stringify(updatedUser))
-    setUserInfo(updatedUser)
-    setPassword({ current: '', new: '', confirm: '' })
-    setShowPasswordModal(false)
-    setSuccessMessage('Contraseña actualizada correctamente')
+    ;(async () => {
+      const updatedUser = { ...userInfo, password: password.new }
+      try {
+        const serverUser = await updateUserOnServer(updatedUser)
+        const merged = { ...updatedUser, ...serverUser }
+        try { localStorage.setItem('user', JSON.stringify(merged)) } catch (e) { }
+        setUserInfo(merged)
+        setPassword({ current: '', new: '', confirm: '' })
+        setShowPasswordModal(false)
+        setSuccessMessage('Contraseña actualizada correctamente')
+      } catch (e) {
+        console.error(e)
+        setFormErrors({ form: 'No se pudo actualizar la contraseña en el servidor' })
+      }
+    })()
   }
 
   return (

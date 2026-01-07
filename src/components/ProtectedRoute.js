@@ -1,65 +1,52 @@
-// src/components/ProtectedRoute.js
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { CSpinner } from '@coreui/react'
 
-const ProtectedRoute = ({ children }) => {
-  const [authStatus, setAuthStatus] = useState({
-    loading: true,
-    isAuthenticated: false
-  })
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const [state, setState] = useState({ loading: true, allowed: false })
 
   useEffect(() => {
     const checkAuth = () => {
       try {
-        const token = localStorage.getItem('token')
-        const user = localStorage.getItem('user')
-        
-        // Verificar que ambos existan y user sea JSON válido
-        const isValid = !!(token && user)
-        setAuthStatus({
-          loading: false,
-          isAuthenticated: isValid
-        })
-      } catch (error) {
-        console.error('Error verificando autenticación:', error)
-        setAuthStatus({
-          loading: false,
-          isAuthenticated: false
-        })
+        const auth = JSON.parse(localStorage.getItem('auth'))
+        const user = JSON.parse(localStorage.getItem('user'))
+
+        if (!auth || !user) {
+          return setState({ loading: false, allowed: false })
+        }
+
+        if (Date.now() > auth.expiresAt) {
+          localStorage.removeItem('auth')
+          localStorage.removeItem('user')
+          return setState({ loading: false, allowed: false })
+        }
+
+        // Si se pasan roles permitidos, comprobar que el usuario tenga uno de ellos
+        let allowed = true
+        if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
+          const userRole = Number(user.id_role ?? user.role ?? user.role_id ?? -1)
+          const allowedNums = allowedRoles.map(r => Number(r))
+          allowed = allowedNums.includes(userRole)
+        }
+
+        setState({ loading: false, allowed })
+      } catch {
+        setState({ loading: false, allowed: false })
       }
     }
 
     checkAuth()
-
-    // Escuchar cambios en localStorage
-    const handleStorageChange = () => {
-      checkAuth()
-    }
-
-    window.addEventListener('storage', handleStorageChange)
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange)
-    }
   }, [])
 
-  if (authStatus.loading) {
+  if (state.loading) {
     return (
       <div className="d-flex justify-content-center align-items-center min-vh-100">
-        <div className="text-center">
-          <CSpinner color="primary" />
-          <p className="mt-2">Verificando autenticación...</p>
-        </div>
+        <CSpinner />
       </div>
     )
   }
 
-  if (!authStatus.isAuthenticated) {
-    return <Navigate to="/login" replace />
-  }
-
-  return children
+  return state.allowed ? children : <Navigate to="/404" replace />
 }
 
 export default ProtectedRoute

@@ -75,14 +75,26 @@
     },
     {
       "id": "8fb5",
-      "nombre": "Diego Alexander",
+      "nombre": "Diego Alexanderr",
       "apellido": "Altamiranda Rodriguez",
       "cedula": "30492032",
       "email": "diegoaltamiranda22@gmail.com",
       "password": "diego2004",
       "telefono": "04247028764",
       "id_role": 2,
-      "fecha_registro": "2026-01-06T01:06:20.679Z"
+      "fecha_registro": "2026-01-06T01:06:20.679Z",
+      "id_usuario": "8fb5"
+    },
+    {
+      "id": "e3bc",
+      "nombre": "Maria Alejandra",
+      "apellido": "Muñoz Tourkmani",
+      "cedula": "30616970",
+      "email": "maria123@gmail.com",
+      "password": "1234",
+      "telefono": "04123456678",
+      "id_role": 3,
+      "fecha_registro": "2026-01-06T18:04:23.013Z"
     }
   ],
   "docente": [
@@ -90,6 +102,10 @@
       "id_docente": 1,
       "id_usuario": 3,
       "id": "55f3"
+    },
+    {
+      "id": "2883",
+      "id_usuario": "e3bc"
     }
   ],
   "docente_grados": [
@@ -104,6 +120,11 @@
       "id_docente": 1,
       "id_grado": 6,
       "id": "9c75"
+    },
+    {
+      "id": "c08e",
+      "id_docente": "2883",
+      "id_grado": 4
     }
   ],
   "estudiantes": [
@@ -126,148 +147,249 @@
   ],
   "contenidos": [
     {
-      "id_contenido": 1,
-      "titulo": "Present Simple Tense",
-      "descripcion": "Aprende a usar el presente simple en inglés",
-      "tipo": "video",
+      "id": "e627",
+      "titulo": "Abecedario en Inglés",
+      "descripcion": "Adjunto documento para que entiendan y practiquen la pronunciación en inglés de las vocales",
       "grado_objetivo": 5,
-      "archivo_url": "https://ejemplo.com/video1.mp4",
-      "archivo_nombre": "present_simple.mp4",
-      "archivo_tipo": "video/mp4",
-      "archivo_tamaño": 1024000,
-      "imagen_miniatura": "https://ejemplo.com/thumb1.jpg",
-      "fecha_creacion": "2024-01-20T09:00:00Z",
-      "id_docente": 1,
-      "id": "a985"
+      "archivo_url": "https://res.cloudinary.com/dpfoq9qg1/raw/upload/v1767728467/contenidos_ingles/Abecedario-en-ingles_-PDF.pdf",
+      "archivo_nombre": "Abecedario-en-ingles_-PDF.pdf",
+      "archivo_tipo": "application/pdf",
+      "cloudinary_tipo": "raw",
+      "tipo": "pdf",
+      "fecha_creacion": "2026-01-06T19:51:00.139Z",
+      "id_docente": "e3bc"
+    },
+    {
+      "id": "4737",
+      "titulo": "Testingg",
+      "descripcion": "Testing",
+      "grado_objetivo": 3,
+      "archivo_url": "https://res.cloudinary.com/dpfoq9qg1/image/upload/v1767730220/contenidos_ingles/casa-kame-de-dragon-ball_3840x2160_xtrafondos.com.jpg",
+      "archivo_nombre": "casa-kame-de-dragon-ball_3840x2160_xtrafondos.com.jpg",
+      "archivo_tipo": "image/jpeg",
+      "cloudinary_tipo": "image",
+      "tipo": "image",
+      "fecha_creacion": "2026-01-06T20:10:20.553Z",
+      "id_docente": "e3bc"
     }
   ],
   "actividades": [
     {
-      "id_actividad": 1,
-      "nombre": "Exercise: Present Simple",
+      "nombre": "Exercise: Present Simplee",
       "instrucciones": "Complete the sentences with the correct form",
       "tipo": "quiz",
       "fecha_vencimiento": "2024-02-15",
-      "id_contenido": 1,
+      "id_contenido": null,
       "id": "efbc"
-    }
-  ],
-  "progreso_actividades": [
+    },
     {
-      "id_progreso": 1,
-      "id_estudiante": 1,
-      "id_actividad": 1,
-      "completado": false,
-      "fecha_marcado": "2024-01-21T10:00:00Z",
-      "id": "2d8c"
+      "id": "b686",
+      "nombre": "Testing",
+      "instrucciones": "Testing",
+      "tipo": "practica",
+      "fecha_vencimiento": "2026-01-13",
+      "id_contenido": "e627"
     }
   ],
   "evaluaciones": [
     {
       "id_evaluacion": 1,
-      "titulo": "Grammar Test 1",
-      "descripcion": "Test on basic grammar concepts",
-      "tipo_habilidad": "grammar",
+      "titulo": "Examen Unidad 1: Basics",
+      "descripcion": "Prueba de colores y pronunciación básica. Debe sumar 20 puntos.",
+      "tipo_habilidad": "mixed",
       "duracion_minutos": 45,
-      "fecha_disponible_hasta": "2024-02-28",
-      "activa": true,
-      "id_contenido": 1,
-      "id_docente": 1,
-      "id": "a111"
-    },
-    {
-      "id": "a4cb",
-      "titulo": "Números En Inglés",
-      "descripcion": "Dime los números en inglés",
-      "tipo_habilidad": "pronunciation",
-      "duracion_minutos": 30,
       "fecha_disponible_hasta": "2025-12-30",
       "activa": true,
-      "id_contenido": 1
+      "id_contenido": 1,
+      "id_docente": 3
     },
     {
-      "id": "3c92",
-      "titulo": "Vocales en Inglés",
-      "descripcion": "Si",
-      "tipo_habilidad": "grammar",
-      "duracion_minutos": 2,
-      "fecha_disponible_hasta": "2026-01-14",
+      "id": "6535",
+      "titulo": "Testing",
+      "descripcion": "Testing",
+      "tipo_habilidad": "mixed",
+      "duracion_minutos": 20,
+      "fecha_disponible_hasta": "2026-01-16T19:59",
       "activa": true,
-      "id_contenido": 1,
-      "id_evaluacion": 1767661529239
+      "id_contenido": "Testingg",
+      "id_docente": "e3bc",
+      "id_evaluacion": 1767743964099
     }
   ],
   "preguntas": [
     {
-      "id_pregunta": 1,
+      "id_pregunta": 101,
       "id_evaluacion": 1,
-      "enunciado": "She _____ to school every day.",
+      "enunciado": "Selecciona el color rojo en inglés:",
       "tipo_pregunta": "opcion_multiple",
-      "puntos": 1,
-      "orden": 1,
-      "id": "6283"
-    },
-    {
-      "id": "2eb7",
-      "enunciado": "¿Si?",
-      "tipo_pregunta": "audio_pronunciacion",
-      "puntos": 2,
+      "puntos": 5,
       "orden": 1
     },
     {
-      "id": "ea95",
-      "enunciado": "si",
-      "tipo_pregunta": "verdadero_falso",
-      "puntos": 2,
+      "id_pregunta": 102,
+      "id_evaluacion": 1,
+      "enunciado": "Completa: The sky is ______ (azul).",
+      "tipo_pregunta": "completacion",
+      "respuesta_correcta_texto": "blue",
+      "puntos": 5,
       "orden": 2
+    },
+    {
+      "id_pregunta": 103,
+      "id_evaluacion": 1,
+      "enunciado": "Presiona el micrófono y pronuncia la palabra: 'Yellow'",
+      "tipo_pregunta": "reconocimiento_voz",
+      "respuesta_correcta_texto": "yellow",
+      "puntos": 5,
+      "orden": 3
+    },
+    {
+      "id_pregunta": 104,
+      "id_evaluacion": 1,
+      "enunciado": "Lee el siguiente texto y responde: 'Mary has a little lamb.' ¿Qué animal tiene Mary?",
+      "tipo_pregunta": "lectura",
+      "respuesta_correcta_texto": "lamb",
+      "puntos": 5,
+      "orden": 4
+    },
+    {
+      "id": "bc17",
+      "id_evaluacion": 1767740121520,
+      "enunciado": "Testing",
+      "tipo_pregunta": "reconocimiento_voz",
+      "puntos": 20,
+      "respuesta_correcta_texto": "Hola",
+      "id_pregunta": 1767740143032
+    },
+    {
+      "id": "ce5a",
+      "id_evaluacion": 1767740797056,
+      "enunciado": "My name is ________",
+      "tipo_pregunta": "completacion",
+      "puntos": 10,
+      "respuesta_correcta_texto": "Diego",
+      "id_pregunta": 1767740831377
+    },
+    {
+      "id": "b434",
+      "id_evaluacion": 1767740797056,
+      "enunciado": "Diga \"Eso\"",
+      "tipo_pregunta": "reconocimiento_voz",
+      "puntos": 10,
+      "respuesta_correcta_texto": "Eso",
+      "id_pregunta": 1767740842424
+    },
+    {
+      "id": "cde5",
+      "id_evaluacion": 1767742038938,
+      "enunciado": "Hola",
+      "tipo_pregunta": "opcion_multiple",
+      "puntos": 20,
+      "respuesta_correcta_texto": "",
+      "id_pregunta": 1767742053729
+    },
+    {
+      "id": "8d6f",
+      "id_evaluacion": 1767742584939,
+      "enunciado": "Testingg",
+      "tipo_pregunta": "completacion",
+      "puntos": 20,
+      "respuesta_correcta_texto": "Testing",
+      "id_pregunta": 1767742605609
+    },
+    {
+      "id": "87d5",
+      "id_evaluacion": 1767743221858,
+      "enunciado": "Test",
+      "tipo_pregunta": "completacion",
+      "puntos": 20,
+      "respuesta_correcta_texto": "Test",
+      "id_pregunta": 1767743247522
+    },
+    {
+      "id": "9368",
+      "id_evaluacion": 1767743710714,
+      "enunciado": "a",
+      "tipo_pregunta": "completacion",
+      "puntos": 20,
+      "respuesta_correcta_texto": "a",
+      "id_pregunta": 1767743766714
+    },
+    {
+      "id": "69b7",
+      "id_evaluacion": 1767743964099,
+      "enunciado": "A",
+      "tipo_pregunta": "reconocimiento_voz",
+      "puntos": 20,
+      "respuesta_correcta_texto": "A",
+      "id_pregunta": 1767743976795
+    },
+    {
+      "id": "ae8c",
+      "id_evaluacion": 1767747283349,
+      "enunciado": "Test 2",
+      "tipo_pregunta": "completacion",
+      "puntos": 20,
+      "respuesta_correcta_texto": "t",
+      "id_pregunta": 1767747347053
     }
   ],
   "opciones_pregunta": [
     {
       "id_opcion": 1,
-      "id_pregunta": 1,
-      "texto_opcion": "go",
-      "es_correcta": false,
-      "id": "264b"
+      "id_pregunta": 101,
+      "texto_opcion": "Blue",
+      "es_correcta": false
     },
     {
       "id_opcion": 2,
-      "id_pregunta": 1,
-      "texto_opcion": "goes",
-      "es_correcta": true,
-      "id": "9708"
-    },
-    {
-      "id": "a3a7",
-      "texto_opcion": "1",
+      "id_pregunta": 101,
+      "texto_opcion": "Red",
       "es_correcta": true
     },
     {
-      "id": "ae91",
-      "texto_opcion": "2",
+      "id_opcion": 3,
+      "id_pregunta": 101,
+      "texto_opcion": "Green",
       "es_correcta": false
+    },
+    {
+      "id": "651a",
+      "id_pregunta": 1767742053729,
+      "texto_opcion": "Hola",
+      "es_correcta": true,
+      "id_opcion": 1767742053747
+    },
+    {
+      "id": "9097",
+      "id_pregunta": 1767742053729,
+      "texto_opcion": "Hello",
+      "es_correcta": false,
+      "id_opcion": 1767742053748
     }
   ],
   "resultados_evaluaciones": [
     {
-      "id_resultado": 1,
-      "id_estudiante": 1,
-      "id_evaluacion": 1,
-      "nota_final": 8.5,
-      "estado_revision": "completado",
-      "fecha_inicio": "2024-01-22T14:00:00Z",
-      "fecha_completado": "2024-01-22T14:45:00Z",
-      "id": "b48f"
+      "id": "a0d3",
+      "id_estudiante": "8fb5",
+      "id_evaluacion": 1767740121520,
+      "nota_final": 20,
+      "fecha_completado": "2026-01-06T22:56:32.937Z"
+    },
+    {
+      "id": "0bdc",
+      "id_estudiante": "8fb5",
+      "id_evaluacion": 1767740797056,
+      "nota_final": 10,
+      "fecha_completado": "2026-01-06T23:08:13.392Z"
+    },
+    {
+      "id": "3cd6",
+      "id_estudiante": "8fb5",
+      "id_evaluacion": 1767743964099,
+      "nota_final": 20,
+      "fecha_completado": "2026-01-07T00:00:05.475Z"
     }
   ],
-  "respuestas_estudiantes": [
-    {
-      "id_respuesta": 1,
-      "id_resultado": 1,
-      "id_pregunta": 1,
-      "id_opcion_seleccionada": 2,
-      "puntos_obtenidos": 1,
-      "id": "4f52"
-    }
-  ]
+  "respuestas_estudiantes": []
 }

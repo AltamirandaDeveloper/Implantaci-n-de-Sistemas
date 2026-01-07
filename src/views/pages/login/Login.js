@@ -84,15 +84,37 @@ const Login = () => {
         throw new Error('Credenciales inválidas')
       }
 
-      const userData = {
-        id: user.id,
-        email: user.email,
-        name: user.nombre || user.name || user.email.split('@')[0],
-        role: user.role || 'user'
+      const roleMap = {
+        1: 'admin',
+        2: 'student',
+        3: 'teacher',
       }
 
-      localStorage.setItem('user', JSON.stringify(userData))
-      localStorage.setItem('token', `auth-${user.id}-${Date.now()}`)
+      // Normalize user object to a stable shape expected across the app
+      const userData = {
+        id_usuario: user.id_usuario ?? user.id ?? (user.id_user && String(user.id_user)),
+        id: user.id ?? user.id_usuario ?? undefined,
+        nombre: user.nombre ?? user.name ?? (user.email ? user.email.split('@')[0] : ''),
+        apellido: user.apellido ?? user.lastName ?? user.surname ?? '',
+        email: user.email ?? user.emailAddress ?? '',
+        telefono: user.telefono ?? user.phone ?? '',
+        id_role: user.id_role ?? (typeof user.role === 'string' ? (user.role === 'admin' ? 1 : user.role === 'teacher' ? 3 : 2) : user.role),
+        password: user.password ?? '',
+        role: roleMap[user.id_role] || (user.role ?? 'student')
+      }
+
+      // Session/auth data
+      const SESSION_DURATION = 1000 * 60 * 60 * 8 // 8 horas
+      const authData = {
+        token: `auth-${userData.id || userData.id_usuario || 'anon'}-${Date.now()}`,
+        expiresAt: Date.now() + SESSION_DURATION,
+      }
+
+      try { localStorage.setItem('auth', JSON.stringify(authData)) } catch (e) { /* ignore storage errors */ }
+      try { localStorage.setItem('user', JSON.stringify(userData)) } catch (e) { /* ignore storage errors */ }
+      // also store a simple token key for compatibility with other code that expects `token`
+      try { localStorage.setItem('token', authData.token) } catch (e) { }
+
 
       setStatus({
         loading: false,

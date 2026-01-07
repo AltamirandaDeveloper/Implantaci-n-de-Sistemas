@@ -14,7 +14,7 @@ const routes = [
   { path: '/dashboard', name: 'Dashboard', element: Dashboard },
   { path: '/theme', name: 'Theme', element: Colors, exact: true },
   { path: '/theme/colors', name: 'Colors', element: Colors },
-  { path: '/users', name: 'Users', element: Users },
+  { path: '/users', name: 'Users', element: Users, allowedRoles: [1, 3] },
   { path: '/profile', name: 'Profile', element: Profile },
   { path: '/evaluations', name: 'Evaluations', element: Evaluations },
   { path: '/activities', name: 'Activities', element: Activities },

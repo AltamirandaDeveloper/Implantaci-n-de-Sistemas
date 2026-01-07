@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { CContainer, CSpinner } from '@coreui/react'
+import ProtectedRoute from './ProtectedRoute'
 
 // routes config
 import routes from '../routes'
@@ -11,16 +12,21 @@ const AppContent = () => {
       <Suspense fallback={<CSpinner color="primary" />}>
         <Routes>
           {routes.map((route, idx) => {
+            if (!route.element) return null
+            const Element = route.element
+            const elementNode = <Element />
             return (
-              route.element && (
-                <Route
-                  key={idx}
-                  path={route.path}
-                  exact={route.exact}
-                  name={route.name}
-                  element={<route.element />}
-                />
-              )
+              <Route
+                key={idx}
+                path={route.path}
+                exact={route.exact}
+                name={route.name}
+                element={
+                  route.allowedRoles && Array.isArray(route.allowedRoles) && route.allowedRoles.length > 0
+                    ? <ProtectedRoute allowedRoles={route.allowedRoles}>{elementNode}</ProtectedRoute>
+                    : elementNode
+                }
+              />
             )
           })}
           <Route path="/" element={<Navigate to="dashboard" replace />} />

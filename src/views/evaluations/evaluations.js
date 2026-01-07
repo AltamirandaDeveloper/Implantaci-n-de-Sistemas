@@ -1,93 +1,69 @@
-"use client"
-
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import {
-  CCard,
-  CCardBody,
-  CCardHeader,
-  CCol,
-  CRow,
-  CButton,
-  CModal,
-  CModalHeader,
-  CModalTitle,
-  CModalBody,
-  CModalFooter,
-  CForm,
-  CFormInput,
-  CFormLabel,
-  CFormSelect,
-  CFormTextarea,
-  CTable,
-  CTableHead,
-  CTableRow,
-  CTableHeaderCell,
-  CTableBody,
-  CTableDataCell,
-  CBadge,
-  CSpinner,
-  CNav,
-  CNavItem,
-  CNavLink,
-  CTabContent,
-  CTabPane,
-  CFormCheck,
-  CAlert,
-  CProgress,
+  CCard, CCardBody, CCardHeader, CCol, CRow, CButton, CModal, CModalHeader,
+  CModalTitle, CModalBody, CModalFooter, CForm, CFormInput, CFormLabel,
+  CFormSelect, CFormTextarea, CTable, CTableHead, CTableRow, CTableHeaderCell,
+  CTableBody, CTableDataCell, CBadge, CSpinner, CNav, CNavItem, CNavLink,
+  CTabContent, CTabPane, CFormCheck, CAlert, CProgress
 } from "@coreui/react"
 import CIcon from "@coreui/icons-react"
-import { cilPlus, cilTrash, cilPencil, cilList, cilNotes, cilMediaPlay, cilCheckCircle } from "@coreui/icons"
+import { cilPlus, cilTrash, cilList, cilNotes, cilMediaPlay, cilCheckCircle, cilMicrophone, cilChartLine, cilLockLocked } from "@coreui/icons"
+import AlertMessage from "../../components/ui/AlertMessage"
 
 const Evaluations = () => {
   // --- Estados Generales ---
   const [currentUser, setCurrentUser] = useState(null)
-  const [activeTab, setActiveTab] = useState(1)
+  const [activeTab, setActiveTab] = useState(1) // 1: Evaluaciones, 2: Resultados
   const [loading, setLoading] = useState(true)
-  
-  // --- Datos de la API ---
+
+  // --- Datos ---
   const [evaluaciones, setEvaluaciones] = useState([])
   const [contenidos, setContenidos] = useState([])
   const [resultados, setResultados] = useState([])
   const [estudiantes, setEstudiantes] = useState([])
-  
-  // --- Estados de Gestión (Docente) ---
-  const [visible, setVisible] = useState(false) // Modal Crear/Editar Evaluación
-  const [preguntasVisible, setPreguntasVisible] = useState(false) // Modal Gestión Preguntas
-  const [editMode, setEditMode] = useState(false)
+  const [usuarios, setUsuarios] = useState([])
+
+  // --- Gestión Docente ---
+  const [visible, setVisible] = useState(false)
+  const [preguntasVisible, setPreguntasVisible] = useState(false)
   const [currentEvaluation, setCurrentEvaluation] = useState(null)
-  const [preguntas, setPreguntas] = useState([]) // Preguntas para gestión
-  
-  // --- Estados de Examen (Estudiante) ---
+  const [preguntas, setPreguntas] = useState([])
+  const [puntosTotales, setPuntosTotales] = useState(0)
+
+  // --- Examen Estudiante ---
   const [examModalVisible, setExamModalVisible] = useState(false)
   const [activeExam, setActiveExam] = useState(null)
   const [examQuestions, setExamQuestions] = useState([])
   const [examOptions, setExamOptions] = useState([])
-  const [studentAnswers, setStudentAnswers] = useState({}) // { id_pregunta: valor }
+  const [studentAnswers, setStudentAnswers] = useState({})
   const [submittingExam, setSubmittingExam] = useState(false)
+  const [isListening, setIsListening] = useState(false)
 
   // --- Formularios ---
   const [formData, setFormData] = useState({
-    titulo: "",
-    descripcion: "",
-    tipo_habilidad: "grammar",
-    duracion_minutos: 30,
-    fecha_disponible_hasta: "",
-    activa: true,
-    id_contenido: "",
+    titulo: "", descripcion: "", tipo_habilidad: "mixed", duracion_minutos: 20, fecha_disponible_hasta: "", activa: true, id_contenido: ""
   })
 
   const [preguntaForm, setPreguntaForm] = useState({
-    enunciado: "",
-    tipo_pregunta: "opcion_multiple",
-    puntos: 1,
-    opciones: ["", ""],
-    respuesta_correcta: 0,
+    enunciado: "", tipo_pregunta: "opcion_multiple", puntos: 5, opciones: ["", ""], respuesta_correcta: 0, respuesta_correcta_texto: ""
   })
 
+  // --- Estados para Alertas y Confirmaciones ---
+  const [alertMessage, setAlertMessage] = useState(null)
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false)
+  const [evaluationToDelete, setEvaluationToDelete] = useState(null)
+  const [deletePreguntaModalVisible, setDeletePreguntaModalVisible] = useState(false)
+  const [preguntaToDelete, setPreguntaToDelete] = useState(null)
+
+  // --- Estados para Modal de Confirmación de Entrega (Estudiante) ---
+  const [submitConfirmModalVisible, setSubmitConfirmModalVisible] = useState(false)
+  const [examResultModalVisible, setExamResultModalVisible] = useState(false)
+  const [examResult, setExamResult] = useState(null)
+  const [examScoreDetails, setExamScoreDetails] = useState({ total: 0, obtained: 0, percentage: 0 })
+
+  // Simulación de Auth
   useEffect(() => {
-    // Simular obtención de usuario logueado (En producción usar Context o Auth real)
-    // Cambia el ID aquí para probar como Estudiante (id:2) o Docente (id:1)
-    const storedUser = JSON.parse(localStorage.getItem("user")) || { id_usuario: 1, id_role: 2, nombre: "Admin" } 
+    const storedUser = JSON.parse(localStorage.getItem("user")) || { id_usuario: 3, id_role: 3, nombre: "Profe" }
     setCurrentUser(storedUser)
     fetchData()
   }, [])
@@ -95,605 +71,850 @@ const Evaluations = () => {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [evaluacionesRes, contenidosRes, resultadosRes, estudiantesRes] = await Promise.all([
+      const [evalRes, contRes, resRes, estRes, userRes] = await Promise.all([
         fetch("http://localhost:3001/evaluaciones"),
         fetch("http://localhost:3001/contenidos"),
         fetch("http://localhost:3001/resultados_evaluaciones"),
         fetch("http://localhost:3001/estudiantes"),
+        fetch("http://localhost:3001/usuarios"),
       ])
-      
-      const evaluacionesData = await evaluacionesRes.json()
-      const contenidosData = await contenidosRes.json()
-      const resultadosData = await resultadosRes.json()
-      const estudiantesData = await estudiantesRes.json()
-
-      setEvaluaciones(evaluacionesData)
-      setContenidos(contenidosData)
-      setResultados(resultadosData)
-      setEstudiantes(estudiantesData)
-    } catch (error) {
-      console.error("Error fetching data:", error)
-    } finally {
-      setLoading(false)
+      setEvaluaciones(await evalRes.json())
+      setContenidos(await contRes.json())
+      setResultados(await resRes.json())
+      setEstudiantes(await estRes.json())
+      setUsuarios(await userRes.json())
+    } catch (error) { 
+      console.error(error)
+      setAlertMessage({ message: "Error al cargar los datos", issues: ["No se pudieron cargar los datos del servidor"] })
+    } finally { 
+      setLoading(false) 
     }
   }
 
-  // ==========================================
-  // LÓGICA DEL ESTUDIANTE (PRESENTAR EXAMEN)
-  // ==========================================
+  // --- Funciones para mostrar alertas ---
+  const showSuccess = (message) => {
+    setAlertMessage({ message, type: 'success' })
+  }
 
-  const handleStartExam = async (evaluation) => {
+  const showError = (message, issues = []) => {
+    setAlertMessage({ message, issues, type: 'danger' })
+  }
+
+  const closeAlert = () => {
+    setAlertMessage(null)
+  }
+
+  // --- NUEVA FUNCIÓN: ELIMINAR EVALUACIÓN CON MODAL DE CONFIRMACIÓN ---
+  const confirmDeleteEvaluation = (evaluation) => {
+    setEvaluationToDelete(evaluation)
+    setDeleteModalVisible(true)
+  }
+
+  const handleDeleteEvaluation = async () => {
+    if (!evaluationToDelete) return
+    
     try {
-      setLoading(true)
-      // 1. Obtener preguntas de la evaluación
-      const preguntasRes = await fetch(`http://localhost:3001/preguntas?id_evaluacion=${evaluation.id_evaluacion}`)
-      const preguntasData = await preguntasRes.json()
-
-      // 2. Obtener todas las opciones (JSON server no soporta joins complejos facil, traemos todas y filtramos)
-      // Idealmente: fetch(`http://localhost:3001/opciones_pregunta`) y filtrar, o hacer fetch por pregunta.
-      // Optimizacion: Traer todas las opciones de una vez es más rápido para prototipos pequeños.
-      const opcionesRes = await fetch(`http://localhost:3001/opciones_pregunta`)
-      const opcionesData = await opcionesRes.json()
-
-      setActiveExam(evaluation)
-      setExamQuestions(preguntasData)
-      setExamOptions(opcionesData)
-      setStudentAnswers({})
-      setExamModalVisible(true)
-    } catch (error) {
-      console.error("Error iniciando examen:", error)
-      alert("Error al cargar el examen")
+      // Primero eliminar todos los resultados asociados a esta evaluación
+      const resultadosAEliminar = resultados.filter(res => res.id_evaluacion === evaluationToDelete.id_evaluacion)
+      
+      // Eliminar cada resultado
+      for (const resultado of resultadosAEliminar) {
+        await fetch(`http://localhost:3001/resultados_evaluaciones/${resultado.id}`, { 
+          method: "DELETE" 
+        })
+      }
+      
+      // Luego eliminar la evaluación
+      const response = await fetch(`http://localhost:3001/evaluaciones/${evaluationToDelete.id}`, { 
+        method: "DELETE" 
+      })
+      
+      if (!response.ok) {
+        throw new Error("Error al eliminar la evaluación")
+      }
+      
+      // Actualizar estados locales
+      setEvaluaciones(evaluaciones.filter(e => e.id !== evaluationToDelete.id))
+      setResultados(resultados.filter(res => res.id_evaluacion !== evaluationToDelete.id_evaluacion))
+      
+      showSuccess(`Evaluación "${evaluationToDelete.titulo}" eliminada correctamente.`)
+    } catch (error) { 
+      console.error(error)
+      showError("Error al eliminar la evaluación", ["No se pudo eliminar la evaluación", "Inténtalo de nuevo más tarde"])
     } finally {
-      setLoading(false)
+      setDeleteModalVisible(false)
+      setEvaluationToDelete(null)
     }
   }
 
-  const handleAnswerChange = (preguntaId, valor) => {
-    setStudentAnswers(prev => ({
-      ...prev,
-      [preguntaId]: valor
-    }))
+  // --- Confirmación para eliminar pregunta ---
+  const confirmDeletePregunta = (pregunta) => {
+    setPreguntaToDelete(pregunta)
+    setDeletePreguntaModalVisible(true)
+  }
+
+  const handleDeletePregunta = async () => {
+    if (!preguntaToDelete) return
+    
+    try {
+      await fetch(`http://localhost:3001/preguntas/${preguntaToDelete.id || preguntaToDelete.id_pregunta}`, { 
+        method: "DELETE" 
+      })
+      
+      const filtered = preguntas.filter(p => 
+        p.id !== preguntaToDelete.id && p.id_pregunta !== preguntaToDelete.id_pregunta
+      )
+      setPreguntas(filtered)
+      setPuntosTotales(filtered.reduce((acc, curr) => acc + Number(curr.puntos), 0))
+      showSuccess("Pregunta eliminada correctamente")
+    } catch (error) { 
+      console.error(error)
+      showError("Error al eliminar la pregunta")
+    } finally {
+      setDeletePreguntaModalVisible(false)
+      setPreguntaToDelete(null)
+    }
+  }
+
+  // ==========================================
+  // RECONOCIMIENTO DE VOZ (Nativo) - Mantenido
+  // ==========================================
+  const startListening = (idPregunta) => {
+    if (!('webkitSpeechRecognition' in window)) {
+      showError("Reconocimiento de voz no soportado", ["Tu navegador no soporta reconocimiento de voz", "Usa Chrome o Edge para esta función"])
+      return
+    }
+    const recognition = new window.webkitSpeechRecognition()
+    recognition.lang = 'en-US'
+    recognition.continuous = false
+    recognition.interimResults = false
+    setIsListening(true)
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      handleAnswerChange(idPregunta, transcript)
+      setIsListening(false)
+    }
+    recognition.onerror = () => setIsListening(false)
+    recognition.onend = () => setIsListening(false)
+    recognition.start()
+  }
+
+  // ==========================================
+  // LÓGICA EXAMEN ESTUDIANTE - MODIFICADA
+  // ==========================================
+  const handleStartExam = async (ev) => {
+    // --- VALIDACIÓN DE FECHA LÍMITE ---
+    if (ev.fecha_disponible_hasta) {
+      const fechaLimite = new Date(ev.fecha_disponible_hasta);
+      const ahora = new Date();
+      if (ahora > fechaLimite) {
+        showError("Plazo vencido", ["El plazo para realizar esta evaluación ha vencido"])
+        return;
+      }
+    }
+
+    // --- NUEVA VALIDACIÓN: VERIFICAR SI YA EXISTE UN RESULTADO ---
+    const yaPresento = resultados.some(res =>
+      (res.id_estudiante === currentUser.id_usuario || res.id_estudiante === currentUser.id) &&
+      res.id_evaluacion === ev.id_evaluacion
+    )
+
+    if (yaPresento) {
+      showError("Evaluación ya realizada", ["Ya has realizado esta evaluación", "No puedes presentarla de nuevo"])
+      return
+    }
+
+    const pregRes = await fetch(`http://localhost:3001/preguntas?id_evaluacion=${ev.id_evaluacion}`)
+    const optsRes = await fetch(`http://localhost:3001/opciones_pregunta`)
+    const pregs = await pregRes.json()
+    const totalPuntos = pregs.reduce((acc, p) => acc + Number(p.puntos), 0)
+    if (totalPuntos !== 20) {
+      showError("Error de configuración", [`Esta evaluación tiene un error de configuración (Suma ${totalPuntos} puntos en vez de 20)`, "Contacte al docente"])
+      return
+    }
+    setActiveExam(ev)
+    setExamQuestions(pregs)
+    setExamOptions(await optsRes.json())
+    setStudentAnswers({})
+    setExamModalVisible(true)
+  }
+
+  const handleAnswerChange = (pid, val) => {
+    setStudentAnswers(prev => ({ ...prev, [pid]: val }))
+  }
+
+  // --- Función para calcular la nota antes de enviar ---
+  const calculateExamScore = () => {
+    let notaAcumulada = 0
+    const details = {
+      total: 20,
+      obtained: 0,
+      percentage: 0
+    }
+
+    examQuestions.forEach(p => {
+      let puntosGanados = 0
+      const respuestaUser = studentAnswers[p.id_pregunta]
+      if (p.tipo_pregunta === "opcion_multiple") {
+        const opciones = examOptions.filter(o => o.id_pregunta === p.id_pregunta)
+        const correcta = opciones.find(o => o.es_correcta)
+        if (correcta && String(respuestaUser) === String(correcta.id_opcion)) puntosGanados = Number(p.puntos)
+      } else {
+        const textoCorrecto = (p.respuesta_correcta_texto || "").trim().toLowerCase()
+        const textoUser = (respuestaUser || "").trim().toLowerCase()
+        if (textoCorrecto && textoUser && textoUser.includes(textoCorrecto)) puntosGanados = Number(p.puntos)
+      }
+      notaAcumulada += puntosGanados
+    })
+
+    details.obtained = notaAcumulada
+    details.percentage = (notaAcumulada / 20) * 100
+    return { notaAcumulada, details }
+  }
+
+  // --- Confirmar entrega del examen (estudiante) ---
+  const confirmSubmitExam = () => {
+    // Verificar si hay preguntas sin responder
+    const preguntasSinResponder = examQuestions.filter(p => !studentAnswers[p.id_pregunta])
+    
+    if (preguntasSinResponder.length > 0) {
+      setAlertMessage({
+        message: "Preguntas sin responder",
+        issues: [`Tienes ${preguntasSinResponder.length} pregunta(s) sin responder`, "¿Estás seguro de que quieres entregar el examen?"],
+        type: 'warning'
+      })
+    }
+    
+    setSubmitConfirmModalVisible(true)
   }
 
   const submitExam = async () => {
-    if (!window.confirm("¿Estás seguro de enviar tus respuestas?")) return
-    
+    setSubmitConfirmModalVisible(false)
     setSubmittingExam(true)
-    let totalPuntosPosibles = 0
-    let totalPuntosObtenidos = 0
-    const respuestasParaGuardar = []
+    
+    const { notaAcumulada, details } = calculateExamScore()
+    setExamScoreDetails(details)
 
-    // 1. Calcular Nota
-    examQuestions.forEach(pregunta => {
-      const puntosPregunta = Number(pregunta.puntos)
-      totalPuntosPosibles += puntosPregunta
+    const nuevoResultado = {
+      id_estudiante: currentUser.id_usuario,
+      id_evaluacion: activeExam.id_evaluacion,
+      nota_final: notaAcumulada,
+      fecha_completado: new Date().toISOString()
+    }
+    
+    try {
+      await fetch("http://localhost:3001/resultados_evaluaciones", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nuevoResultado)
+      })
       
-      const respuestaEstudiante = studentAnswers[pregunta.id_pregunta]
-      let puntosGanados = 0
-      let idOpcionSeleccionada = null
-
-      if (pregunta.tipo_pregunta === "opcion_multiple" || pregunta.tipo_pregunta === "verdadero_falso") {
-        // Buscar la opción correcta en la BD
-        const opcionesDePregunta = examOptions.filter(opt => opt.id_pregunta === pregunta.id_pregunta)
-        const opcionCorrecta = opcionesDePregunta.find(opt => opt.es_correcta === true)
-        
-        // La respuesta del estudiante viene como ID de opcion (string o number)
-        if (respuestaEstudiante && opcionCorrecta && String(respuestaEstudiante) === String(opcionCorrecta.id)) {
-            puntosGanados = puntosPregunta
-        }
-        idOpcionSeleccionada = respuestaEstudiante ? Number(respuestaEstudiante) : null
-
-      } else {
-        // Lógica simple para respuestas abiertas (requiere revisión manual normalmente, aquí damos puntos si no está vacío para el demo)
-        if (respuestaEstudiante && respuestaEstudiante.trim().length > 0) {
-            // En un sistema real, esto iría a "pendiente de revisión". Aquí asumimos correcto para demo.
-            // Opcional: puntosGanados = 0; 
-            puntosGanados = puntosPregunta // Auto-aprobar completitud
-        }
-      }
-
-      totalPuntosObtenidos += puntosGanados
-
-      respuestasParaGuardar.push({
-        id_pregunta: pregunta.id_pregunta,
-        id_opcion_seleccionada: idOpcionSeleccionada, // Para selección multiple
-        respuesta_texto: idOpcionSeleccionada ? null : respuestaEstudiante, // Para abiertas
-        puntos_obtenidos: puntosGanados
+      setExamResult({
+        nota: notaAcumulada,
+        aprobado: notaAcumulada >= 10,
+        fecha: new Date().toLocaleString()
       })
-    })
-
-    // Calcular nota final (Escala 1 a 10)
-    const notaFinal = totalPuntosPosibles > 0 ? (totalPuntosObtenidos / totalPuntosPosibles) * 10 : 0
-
-    try {
-      // 2. Guardar Resultado General
-      const resultadoData = {
-        id_estudiante: currentUser.id_usuario, // Asumiendo que id_usuario mapea a estudiante
-        id_evaluacion: activeExam.id_evaluacion,
-        nota_final: Number(notaFinal.toFixed(2)),
-        estado_revision: "completado",
-        fecha_inicio: new Date().toISOString(), // Simplificado
-        fecha_completado: new Date().toISOString()
-      }
-
-      const resResultado = await fetch("http://localhost:3001/resultados_evaluaciones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(resultadoData)
-      })
-      const resultadoGuardado = await resResultado.json()
-
-      // 3. Guardar Respuestas Detalladas
-      const promises = respuestasParaGuardar.map(respuesta => {
-        return fetch("http://localhost:3001/respuestas_estudiantes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...respuesta,
-            id_resultado: resultadoGuardado.id_resultado // Usar ID generado por JSON Server (aunque en json-server a veces usa 'id')
-          })
-        })
-      })
-
-      await Promise.all(promises)
-
-      alert(`Examen enviado. Tu calificación: ${notaFinal.toFixed(2)}/10`)
+      // Cerrar el modal del examen antes de mostrar resultados para evitar solapamientos
       setExamModalVisible(false)
-      fetchData() // Recargar tablas
-
+      setExamResultModalVisible(true)
     } catch (error) {
-      console.error("Error guardando examen:", error)
-      alert("Hubo un error al guardar tus respuestas.")
-    } finally {
-      setSubmittingExam(false)
+      showError("Error al enviar el examen", ["No se pudo guardar tu resultado", "Inténtalo de nuevo"])
     }
+    
+    setSubmittingExam(false)
   }
 
+  const closeExamResultModal = () => {
+    setExamResultModalVisible(false)
+    setExamModalVisible(false)
+    fetchData()
+  }
 
   // ==========================================
-  // LÓGICA DE GESTIÓN (DOCENTE)
+  // GESTIÓN DOCENTE (Crear/Editar) - MODIFICADO CON ALERTAS
   // ==========================================
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target
-    setFormData({
-      ...formData,
-      [name]: type === "checkbox" ? checked : value,
-    })
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    const evaluationData = {
-      ...formData,
-      duracion_minutos: Number.parseInt(formData.duracion_minutos),
-      id_contenido: Number.parseInt(formData.id_contenido),
-      id_docente: currentUser.id_usuario,
-      // Generar un id_evaluacion numérico si es nuevo (simulación, backend real lo hace)
-      id_evaluacion: editMode ? currentEvaluation.id_evaluacion : Date.now() 
-    }
-
+  const handleManageQuestions = async (ev) => {
+    setCurrentEvaluation(ev)
     try {
-      if (editMode && currentEvaluation) {
-        await fetch(`http://localhost:3001/evaluaciones/${currentEvaluation.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...evaluationData, id: currentEvaluation.id }),
-        })
-      } else {
-        await fetch("http://localhost:3001/evaluaciones", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(evaluationData),
-        })
-      }
-      fetchData()
-      handleCloseModal()
-    } catch (error) {
-      console.error("Error saving evaluation:", error)
-    }
-  }
-
-  const handleDelete = async (id) => {
-    if (window.confirm("¿Está seguro de eliminar esta evaluación?")) {
-      try {
-        await fetch(`http://localhost:3001/evaluaciones/${id}`, { method: "DELETE" })
-        fetchData()
-      } catch (error) { console.error(error) }
-    }
-  }
-
-  const handleManageQuestions = async (evaluation) => {
-    setCurrentEvaluation(evaluation)
-    try {
-      const response = await fetch(`http://localhost:3001/preguntas?id_evaluacion=${evaluation.id_evaluacion}`)
-      const preguntasData = await response.json()
-      setPreguntas(preguntasData)
+      const res = await fetch(`http://localhost:3001/preguntas?id_evaluacion=${ev.id_evaluacion}`)
+      const data = await res.json()
+      setPreguntas(data)
+      setPuntosTotales(data.reduce((acc, curr) => acc + Number(curr.puntos), 0))
       setPreguntasVisible(true)
-    } catch (error) { console.error(error) }
+    } catch (error) {
+      showError("Error al cargar las preguntas")
+    }
   }
 
-  // --- Funciones de Preguntas ---
   const handleSavePregunta = async (e) => {
     e.preventDefault()
+    const puntosNuevos = Number(preguntaForm.puntos)
+    if (puntosTotales + puntosNuevos > 20) {
+      showError("Límite de puntos excedido", [`No puedes agregar esta pregunta`, `Excedería los 20 puntos (actual: ${puntosTotales} + ${puntosNuevos})`])
+      return
+    }
+    
     try {
-      const preguntaData = {
+      const nuevaPregunta = {
         id_evaluacion: currentEvaluation.id_evaluacion,
         enunciado: preguntaForm.enunciado,
         tipo_pregunta: preguntaForm.tipo_pregunta,
-        puntos: Number.parseInt(preguntaForm.puntos),
-        orden: preguntas.length + 1,
-        id_pregunta: Date.now() // Simular ID autoincremental
+        puntos: puntosNuevos,
+        respuesta_correcta_texto: preguntaForm.respuesta_correcta_texto,
+        id_pregunta: Date.now()
       }
-
-      const preguntaResponse = await fetch("http://localhost:3001/preguntas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(preguntaData),
+      
+      const resPreg = await fetch("http://localhost:3001/preguntas", {
+        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(nuevaPregunta)
       })
-      const savedPregunta = await preguntaResponse.json()
-
-      // Guardar opciones si aplica
-      if (["opcion_multiple", "verdadero_falso"].includes(preguntaForm.tipo_pregunta)) {
-        for (let i = 0; i < preguntaForm.opciones.length; i++) {
-          if(preguntaForm.opciones[i]) { // Solo guardar si hay texto
+      
+      const pregGuardada = await resPreg.json()
+      
+      if (preguntaForm.tipo_pregunta === "opcion_multiple") {
+        await Promise.all(preguntaForm.opciones.map(async (txt, idx) => {
+          if (txt) {
             await fetch("http://localhost:3001/opciones_pregunta", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                id_pregunta: savedPregunta.id_pregunta, // Usar el ID lógico
-                texto_opcion: preguntaForm.opciones[i],
-                es_correcta: i === Number.parseInt(preguntaForm.respuesta_correcta),
-                id_opcion: Date.now() + i // Simular ID
-                }),
+              method: "POST", headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({
+                id_pregunta: pregGuardada.id_pregunta,
+                texto_opcion: txt,
+                es_correcta: idx === preguntaForm.respuesta_correcta,
+                id_opcion: Date.now() + idx
+              })
             })
           }
-        }
+        }))
       }
-
-      // Refrescar lista
-      const response = await fetch(`http://localhost:3001/preguntas?id_evaluacion=${currentEvaluation.id_evaluacion}`)
-      setPreguntas(await response.json())
       
-      // Reset form
-      setPreguntaForm({ ...preguntaForm, enunciado: "", opciones: ["", ""], respuesta_correcta: 0 })
-    } catch (error) { console.error(error) }
+      const actualizadas = [...preguntas, pregGuardada]
+      setPreguntas(actualizadas)
+      setPuntosTotales(actualizadas.reduce((acc, curr) => acc + Number(curr.puntos), 0))
+      setPreguntaForm({ ...preguntaForm, enunciado: "", respuesta_correcta_texto: "", opciones: ["", ""] })
+      showSuccess("Pregunta agregada correctamente")
+    } catch (error) {
+      showError("Error al guardar la pregunta")
+    }
   }
 
-  const handleEdit = (evaluation) => {
-    setCurrentEvaluation(evaluation)
-    setFormData({
-      titulo: evaluation.titulo,
-      descripcion: evaluation.descripcion,
-      tipo_habilidad: evaluation.tipo_habilidad,
-      duracion_minutos: evaluation.duracion_minutos,
-      fecha_disponible_hasta: evaluation.fecha_disponible_hasta,
-      activa: evaluation.activa,
-      id_contenido: evaluation.id_contenido.toString(),
-    })
-    setEditMode(true)
-    setVisible(true)
-  }
+  const handleSaveEvaluation = async (e) => {
+    e.preventDefault()
+    
+    // Validación básica
+    if (!formData.titulo.trim()) {
+      showError("Faltan datos", ["El título es obligatorio"])
+      return
+    }
+    
+    if (!formData.fecha_disponible_hasta) {
+      showError("Faltan datos", ["La fecha límite es obligatoria"])
+      return
+    }
 
-  // Helpers de Formulario de Preguntas
-  const handlePreguntaInputChange = (e) => setPreguntaForm({ ...preguntaForm, [e.target.name]: e.target.value })
-  const handleOpcionChange = (index, value) => {
-    const opts = [...preguntaForm.opciones]; opts[index] = value;
-    setPreguntaForm({ ...preguntaForm, opciones: opts })
+    try {
+      const payload = { ...formData, id_docente: currentUser.id_usuario }
+      const response = await fetch("http://localhost:3001/evaluaciones", {
+        method: "POST", headers: {"Content-Type": "application/json"}, 
+        body: JSON.stringify({ ...payload, id_evaluacion: Date.now() })
+      })
+      
+      if (!response.ok) {
+        throw new Error("Error al guardar la evaluación")
+      }
+      
+      showSuccess(`Evaluación "${formData.titulo}" creada correctamente`)
+      fetchData()
+      setVisible(false)
+      setFormData({ 
+        titulo: "", 
+        descripcion: "", 
+        tipo_habilidad: "mixed", 
+        duracion_minutos: 20, 
+        fecha_disponible_hasta: "", 
+        activa: true, 
+        id_contenido: "" 
+      })
+    } catch (error) {
+      console.error(error)
+      showError("Error al crear la evaluación", ["No se pudo guardar la evaluación", "Verifica los datos e inténtalo de nuevo"])
+    }
   }
-  const addOpcion = () => setPreguntaForm({ ...preguntaForm, opciones: [...preguntaForm.opciones, ""] })
-  const removeOpcion = (index) => setPreguntaForm({ ...preguntaForm, opciones: preguntaForm.opciones.filter((_, i) => i !== index) })
-  
-  // Helpers de UI
-  const handleCloseModal = () => { setVisible(false); setEditMode(false); setCurrentEvaluation(null); setFormData({ titulo: "", descripcion: "", tipo_habilidad: "grammar", duracion_minutos: 30, fecha_disponible_hasta: "", activa: true, id_contenido: "" }) }
-  const handleClosePreguntasModal = () => { setPreguntasVisible(false); setPreguntas([]); }
-  const getTipoHabilidadBadge = (tipo) => {
-    const config = { grammar: {c:"primary", l:"Gramática"}, pronunciation: {c:"danger", l:"Pronunciación"}, reading: {c:"info", l:"Lectura"}, listening: {c:"warning", l:"Listening"} }
-    const item = config[tipo] || {c:"secondary", l:tipo};
-    return <CBadge color={item.c}>{item.l}</CBadge>
-  }
-  const getContenidoNombre = (id) => contenidos.find(c => c.id_contenido === id)?.titulo || "N/A"
-  
-  // Helpers Estudiante
-  const getStudentResult = (evalId) => resultados.find(r => r.id_evaluacion === evalId && r.id_estudiante === currentUser.id_usuario)
 
   if (loading) return <div className="text-center p-5"><CSpinner color="primary" /></div>
 
-  // ==========================================
-  // RENDERIZADO
-  // ==========================================
-
   // --- VISTA DOCENTE / ADMIN ---
-  if (currentUser && currentUser.id_role !== 2) {
+  if (currentUser && (currentUser.id_role === 1 || currentUser.id_role === 3)) {
+    // Filtrar resultados para mostrar solo los de evaluaciones existentes
+    const resultadosFiltrados = resultados.filter(res => 
+      evaluaciones.some(evalItem => evalItem.id_evaluacion === res.id_evaluacion)
+    )
+
     return (
-      <CRow>
-        <CCol xs={12}>
-          <CCard className="mb-4">
-            <CCardHeader>
-              <CNav variant="tabs" role="tablist">
-                <CNavItem><CNavLink active={activeTab === 1} onClick={() => setActiveTab(1)} style={{cursor:"pointer"}}><CIcon icon={cilList} className="me-2"/>Evaluaciones</CNavLink></CNavItem>
-                <CNavItem><CNavLink active={activeTab === 2} onClick={() => setActiveTab(2)} style={{cursor:"pointer"}}><CIcon icon={cilNotes} className="me-2"/>Resultados</CNavLink></CNavItem>
-              </CNav>
-            </CCardHeader>
-            <CCardBody>
-              <CTabContent>
-                <CTabPane visible={activeTab === 1}>
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h5>Gestión de Evaluaciones</h5>
-                    <CButton color="primary" onClick={() => setVisible(true)}><CIcon icon={cilPlus} className="me-2" />Nueva Evaluación</CButton>
+      <div className="p-3">
+        <h3>Panel Docente - Evaluaciones</h3>
+        
+        {/* ALERTAS */}
+        {alertMessage && (
+          <div className="mb-3">
+            <AlertMessage 
+              response={alertMessage} 
+              type={alertMessage.type || 'danger'} 
+              onClose={closeAlert}
+            />
+          </div>
+        )}
+        
+        {/* NAVEGACIÓN POR PESTAÑAS */}
+        <CNav variant="tabs" className="mb-3">
+          <CNavItem>
+            <CNavLink active={activeTab === 1} onClick={() => setActiveTab(1)} style={{cursor: 'pointer'}}>
+              Gestión de Exámenes
+            </CNavLink>
+          </CNavItem>
+          <CNavItem>
+            <CNavLink active={activeTab === 2} onClick={() => setActiveTab(2)} style={{cursor: 'pointer'}}>
+              <CIcon icon={cilChartLine} className="me-1"/> Resultados de Estudiantes
+            </CNavLink>
+          </CNavItem>
+        </CNav>
+
+        <CTabContent>
+          <CTabPane visible={activeTab === 1}>
+            <CButton color="primary" onClick={() => setVisible(true)} className="mb-3">
+              <CIcon icon={cilPlus} /> Nueva Evaluación
+            </CButton>
+            
+            <CTable hover bordered align="middle">
+              <CTableHead color="light">
+                <CTableRow>
+                  <CTableHeaderCell>Título / Descripción</CTableHeaderCell>
+                  <CTableHeaderCell>Habilitado Hasta</CTableHeaderCell>
+                  <CTableHeaderCell>Acciones</CTableHeaderCell>
+                </CTableRow>
+              </CTableHead>
+              <CTableBody>
+                {evaluaciones.map(ev => (
+                  <CTableRow key={ev.id_evaluacion}>
+                    <CTableDataCell>
+                      <strong>{ev.titulo}</strong>
+                      <div className="small text-muted">{ev.descripcion}</div>
+                    </CTableDataCell>
+                    <CTableDataCell>
+                      {ev.fecha_disponible_hasta ? new Date(ev.fecha_disponible_hasta).toLocaleString() : 'Sin límite'}
+                    </CTableDataCell>
+                    <CTableDataCell>
+                      <CButton color="warning" size="sm" className="me-2" onClick={() => handleManageQuestions(ev)}>
+                        Gestionar Preguntas
+                      </CButton>
+                      <CButton color="danger" size="sm" onClick={() => confirmDeleteEvaluation(ev)}>
+                        <CIcon icon={cilTrash} />
+                      </CButton>
+                    </CTableDataCell>
+                  </CTableRow>
+                ))}
+              </CTableBody>
+            </CTable>
+          </CTabPane>
+
+          {/* APARTADO RESULTADOS - Ahora solo muestra resultados de evaluaciones existentes */}
+          <CTabPane visible={activeTab === 2}>
+            <CCard>
+              <CCardHeader>Notas y Desempeño</CCardHeader>
+              <CCardBody>
+                {resultadosFiltrados.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-muted">No hay resultados de evaluaciones disponibles.</p>
                   </div>
+                ) : (
                   <CTable hover responsive>
                     <CTableHead>
                       <CTableRow>
-                        <CTableHeaderCell>Título</CTableHeaderCell>
-                        <CTableHeaderCell>Habilidad</CTableHeaderCell>
-                        <CTableHeaderCell>Duración</CTableHeaderCell>
-                        <CTableHeaderCell>Estado</CTableHeaderCell>
-                        <CTableHeaderCell>Acciones</CTableHeaderCell>
+                        <CTableHeaderCell>Estudiante</CTableHeaderCell>
+                        <CTableHeaderCell>Evaluación</CTableHeaderCell>
+                        <CTableHeaderCell>Fecha</CTableHeaderCell>
+                        <CTableHeaderCell>Calificación</CTableHeaderCell>
                       </CTableRow>
                     </CTableHead>
                     <CTableBody>
-                      {evaluaciones.map((evaluation) => (
-                        <CTableRow key={evaluation.id}>
-                          <CTableDataCell>{evaluation.titulo}</CTableDataCell>
-                          <CTableDataCell>{getTipoHabilidadBadge(evaluation.tipo_habilidad)}</CTableDataCell>
-                          <CTableDataCell>{evaluation.duracion_minutos} min</CTableDataCell>
-                          <CTableDataCell>{evaluation.activa ? <CBadge color="success">Activa</CBadge> : <CBadge color="secondary">Inactiva</CBadge>}</CTableDataCell>
-                          <CTableDataCell>
-                            <CButton color="warning" size="sm" className="me-2 text-white" onClick={() => handleManageQuestions(evaluation)}>Preguntas</CButton>
-                            <CButton color="info" size="sm" className="me-2 text-white" onClick={() => handleEdit(evaluation)}><CIcon icon={cilPencil} /></CButton>
-                            <CButton color="danger" size="sm" className="text-white" onClick={() => handleDelete(evaluation.id)}><CIcon icon={cilTrash} /></CButton>
-                          </CTableDataCell>
-                        </CTableRow>
-                      ))}
+                      {resultadosFiltrados.map(res => {
+                        const user = usuarios.find(u => u.id_usuario === res.id_estudiante || u.id === res.id_estudiante)
+                        const evalItem = evaluaciones.find(e => e.id_evaluacion === res.id_evaluacion)
+                        return (
+                          <CTableRow key={res.id}>
+                            <CTableDataCell>{user ? `${user.nombre} ${user.apellido}` : 'ID: ' + res.id_estudiante}</CTableDataCell>
+                            <CTableDataCell>{evalItem?.titulo || 'N/A'}</CTableDataCell>
+                            <CTableDataCell>{new Date(res.fecha_completado).toLocaleDateString()}</CTableDataCell>
+                            <CTableDataCell>
+                              <CBadge color={res.nota_final >= 10 ? 'success' : 'danger'}>
+                                {res.nota_final} / 20
+                              </CBadge>
+                            </CTableDataCell>
+                          </CTableRow>
+                        )
+                      })}
                     </CTableBody>
                   </CTable>
-                </CTabPane>
+                )}
+              </CCardBody>
+            </CCard>
+          </CTabPane>
+        </CTabContent>
 
-                <CTabPane visible={activeTab === 2}>
-                    {/* Tabla de Resultados Globales (Docente) */}
-                    <h5 className="mb-3">Resultados de Estudiantes</h5>
-                    <CTable hover responsive>
-                        <CTableHead>
-                            <CTableRow>
-                                <CTableHeaderCell>Estudiante</CTableHeaderCell>
-                                <CTableHeaderCell>Evaluación</CTableHeaderCell>
-                                <CTableHeaderCell>Nota</CTableHeaderCell>
-                                <CTableHeaderCell>Fecha</CTableHeaderCell>
-                            </CTableRow>
-                        </CTableHead>
-                        <CTableBody>
-                            {resultados.map((res) => (
-                                <CTableRow key={res.id}>
-                                    <CTableDataCell>{estudiantes.find(e => e.id_usuario === res.id_estudiante) ? `Estudiante ID: ${res.id_estudiante}` : res.id_estudiante}</CTableDataCell>
-                                    <CTableDataCell>{evaluaciones.find(e => e.id_evaluacion === res.id_evaluacion)?.titulo || "N/A"}</CTableDataCell>
-                                    <CTableDataCell><strong>{res.nota_final}</strong></CTableDataCell>
-                                    <CTableDataCell>{new Date(res.fecha_completado).toLocaleDateString()}</CTableDataCell>
-                                </CTableRow>
-                            ))}
-                        </CTableBody>
-                    </CTable>
-                </CTabPane>
-              </CTabContent>
-            </CCardBody>
-          </CCard>
-        </CCol>
-        
-        {/* Modales de Gestión (Solo Docente) */}
-        <CModal visible={visible} onClose={handleCloseModal} size="lg">
-            <CModalHeader><CModalTitle>{editMode ? "Editar" : "Nueva"} Evaluación</CModalTitle></CModalHeader>
-            <CForm onSubmit={handleSubmit}>
-                <CModalBody>
-                    <div className="mb-3">
-                        <CFormLabel>Título</CFormLabel>
-                        <CFormInput name="titulo" value={formData.titulo} onChange={handleInputChange} required />
-                    </div>
-                    <div className="mb-3">
-                        <CFormLabel>Descripción</CFormLabel>
-                        <CFormTextarea name="descripcion" value={formData.descripcion} onChange={handleInputChange} required />
-                    </div>
-                    <CRow>
-                        <CCol md={6}>
-                            <CFormLabel>Habilidad</CFormLabel>
-                            <CFormSelect name="tipo_habilidad" value={formData.tipo_habilidad} onChange={handleInputChange}>
-                                <option value="grammar">Gramática</option>
-                                <option value="pronunciation">Pronunciación</option>
-                                <option value="reading">Lectura</option>
-                                <option value="listening">Listening</option>
-                            </CFormSelect>
-                        </CCol>
-                        <CCol md={6}>
-                            <CFormLabel>Duración (min)</CFormLabel>
-                            <CFormInput type="number" name="duracion_minutos" value={formData.duracion_minutos} onChange={handleInputChange} required />
-                        </CCol>
-                    </CRow>
-                    <div className="mt-3">
-                        <CFormLabel>Contenido Relacionado</CFormLabel>
-                        <CFormSelect name="id_contenido" value={formData.id_contenido} onChange={handleInputChange} required>
-                            <option value="">Seleccionar...</option>
-                            {contenidos.map(c => <option key={c.id} value={c.id_contenido}>{c.titulo}</option>)}
+        {/* Modal Crear Evaluación */}
+        <CModal visible={visible} onClose={() => setVisible(false)}>
+          <CModalHeader>Nueva Evaluación</CModalHeader>
+          <CForm onSubmit={handleSaveEvaluation}>
+            <CModalBody>
+              <div className="mb-3">
+                <CFormLabel>Título</CFormLabel>
+                <CFormInput required value={formData.titulo} onChange={e => setFormData({...formData, titulo: e.target.value})} placeholder="Ej: Examen Final" />
+              </div>
+              <div className="mb-3">
+                <CFormLabel>Descripción</CFormLabel>
+                <CFormTextarea 
+                  value={formData.descripcion} 
+                  onChange={e => setFormData({...formData, descripcion: e.target.value})} 
+                  rows={3}
+                  placeholder="Instrucciones para el estudiante..."
+                />
+              </div>
+              <div className="mb-3">
+                <CFormLabel>Relacionar con Contenido</CFormLabel>
+                <CFormSelect value={formData.id_contenido} onChange={e => setFormData({...formData, id_contenido: e.target.value})}>
+                  <option value="">Selecciona un contenido (opcional)</option>
+                  {contenidos.map(c => (
+                    <option key={c.id_contenido} value={c.id_contenido}>{c.titulo}</option>
+                  ))}
+                </CFormSelect>
+              </div>
+              <div className="mb-3">
+                <CFormLabel>Fecha Límite para Presentar</CFormLabel>
+                <CFormInput 
+                  type="datetime-local" 
+                  required
+                  min={new Date().toISOString().slice(0, 16)}
+                  value={formData.fecha_disponible_hasta} 
+                  onChange={e => setFormData({...formData, fecha_disponible_hasta: e.target.value})} 
+                />
+              </div>
+            </CModalBody>
+            <CModalFooter>
+              <CButton color="secondary" onClick={() => setVisible(false)}>Cancelar</CButton>
+              <CButton type="submit" color="primary">Guardar</CButton>
+            </CModalFooter>
+          </CForm>
+        </CModal>
+
+        {/* Modal Gestionar Preguntas */}
+        <CModal visible={preguntasVisible} onClose={() => setPreguntasVisible(false)} size="xl">
+          <CModalHeader>
+            <CModalTitle>Preguntas ({puntosTotales} / 20 Puntos)</CModalTitle>
+          </CModalHeader>
+          <CModalBody>
+            <CRow>
+              <CCol md={7}>
+                {preguntas.map((p, i) => (
+                  <CCard key={p.id_pregunta || p.id || i} className="mb-2">
+                    <CCardBody className="d-flex justify-content-between">
+                      <div>
+                        <strong>{i+1}. ({p.tipo_pregunta})</strong>: {p.enunciado}
+                        <div className="small text-muted">Correcta: {p.respuesta_correcta_texto || "Ver opciones"}</div>
+                      </div>
+                      <div>
+                        <CBadge color="info" className="me-2">{p.puntos} pts</CBadge>
+                        <CButton color="danger" size="sm" onClick={() => confirmDeletePregunta(p)}>
+                          <CIcon icon={cilTrash}/>
+                        </CButton>
+                      </div>
+                    </CCardBody>
+                  </CCard>
+                ))}
+                {puntosTotales < 20 && <CAlert color="warning">Faltan {20 - puntosTotales} puntos para completar.</CAlert>}
+              </CCol>
+              
+              <CCol md={5}>
+                <CCard>
+                  <CCardHeader>Agregar Pregunta</CCardHeader>
+                  <CCardBody>
+                    <CForm onSubmit={handleSavePregunta}>
+                      <div className="mb-2">
+                        <CFormLabel>Enunciado</CFormLabel>
+                        <CFormInput value={preguntaForm.enunciado} onChange={e => setPreguntaForm({...preguntaForm, enunciado: e.target.value})} required />
+                      </div>
+                      <div className="mb-2">
+                        <CFormLabel>Tipo</CFormLabel>
+                        <CFormSelect value={preguntaForm.tipo_pregunta} onChange={e => setPreguntaForm({...preguntaForm, tipo_pregunta: e.target.value})}>
+                          <option value="opcion_multiple">Opción Múltiple</option>
+                          <option value="completacion">Completación</option>
+                          <option value="reconocimiento_voz">Reconocimiento de Voz</option>
+                          <option value="lectura">Lectura (Comprensión)</option>
                         </CFormSelect>
-                    </div>
-                    <div className="mt-3">
-                        <CFormLabel>Fecha Límite</CFormLabel>
-                        <CFormInput type="date" name="fecha_disponible_hasta" value={formData.fecha_disponible_hasta} onChange={handleInputChange} />
-                    </div>
-                    <div className="mt-3">
-                        <CFormCheck label="Activa" name="activa" checked={formData.activa} onChange={handleInputChange} />
-                    </div>
-                </CModalBody>
-                <CModalFooter>
-                    <CButton color="secondary" onClick={handleCloseModal}>Cancelar</CButton>
-                    <CButton color="primary" type="submit">Guardar</CButton>
-                </CModalFooter>
-            </CForm>
+                      </div>
+                      <div className="mb-2">
+                        <CFormLabel>Puntos</CFormLabel>
+                        <CFormInput type="number" max={20 - puntosTotales} value={preguntaForm.puntos} onChange={e => setPreguntaForm({...preguntaForm, puntos: e.target.value})} required />
+                      </div>
+                      {preguntaForm.tipo_pregunta === "opcion_multiple" ? (
+                        <div className="mb-2">
+                          <CFormLabel>Opciones</CFormLabel>
+                          {preguntaForm.opciones.map((op, idx) => (
+                            <div key={idx} className="d-flex mb-1">
+                              <CFormInput size="sm" value={op} onChange={e => {
+                                const newOps = [...preguntaForm.opciones]; newOps[idx] = e.target.value;
+                                setPreguntaForm({...preguntaForm, opciones: newOps})
+                              }} placeholder={`Opción ${idx+1}`} />
+                              <CFormCheck type="radio" name="corr" checked={preguntaForm.respuesta_correcta === idx} onChange={() => setPreguntaForm({...preguntaForm, respuesta_correcta: idx})} className="ms-2"/>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mb-2">
+                          <CFormLabel>{preguntaForm.tipo_pregunta === "reconocimiento_voz" ? "Palabra a pronunciar" : "Respuesta Correcta"}</CFormLabel>
+                          <CFormInput value={preguntaForm.respuesta_correcta_texto} onChange={e => setPreguntaForm({...preguntaForm, respuesta_correcta_texto: e.target.value})} required />
+                        </div>
+                      )}
+                      <CButton type="submit" color="success" className="w-100 text-white" disabled={puntosTotales >= 20}>Agregar</CButton>
+                    </CForm>
+                  </CCardBody>
+                </CCard>
+              </CCol>
+            </CRow>
+          </CModalBody>
         </CModal>
 
-        <CModal visible={preguntasVisible} onClose={handleClosePreguntasModal} size="xl">
-             <CModalHeader><CModalTitle>Gestionar Preguntas</CModalTitle></CModalHeader>
-             <CModalBody>
-                 <CRow>
-                     <CCol md={6} style={{maxHeight: '70vh', overflowY:'auto'}}>
-                         <h6>Preguntas Actuales</h6>
-                         {preguntas.map((p, i) => (
-                             <CCard key={p.id} className="mb-2">
-                                 <CCardBody>
-                                     <strong>{i+1}.</strong> {p.enunciado} <br/>
-                                     <small className="text-muted">Tipo: {p.tipo_pregunta} | Puntos: {p.puntos}</small>
-                                 </CCardBody>
-                             </CCard>
-                         ))}
-                     </CCol>
-                     <CCol md={6}>
-                         <h6>Nueva Pregunta</h6>
-                         <CForm onSubmit={handleSavePregunta}>
-                             <div className="mb-2">
-                                 <CFormLabel>Enunciado</CFormLabel>
-                                 <CFormTextarea name="enunciado" value={preguntaForm.enunciado} onChange={handlePreguntaInputChange} required />
-                             </div>
-                             <CRow className="mb-2">
-                                 <CCol><CFormSelect name="tipo_pregunta" value={preguntaForm.tipo_pregunta} onChange={handlePreguntaInputChange}>
-                                     <option value="opcion_multiple">Opción Múltiple</option>
-                                     <option value="verdadero_falso">Verdadero/Falso</option>
-                                     <option value="respuesta_corta">Respuesta Corta</option>
-                                 </CFormSelect></CCol>
-                                 <CCol><CFormInput type="number" name="puntos" placeholder="Puntos" value={preguntaForm.puntos} onChange={handlePreguntaInputChange} required /></CCol>
-                             </CRow>
-                             {(preguntaForm.tipo_pregunta === "opcion_multiple" || preguntaForm.tipo_pregunta === "verdadero_falso") && (
-                                 <div className="mb-3 bg-light p-2 rounded">
-                                     <label>Opciones (Marque la correcta)</label>
-                                     {preguntaForm.opciones.map((op, idx) => (
-                                         <div key={idx} className="d-flex mb-1 align-items-center">
-                                             <CFormInput size="sm" value={op} onChange={(e) => handleOpcionChange(idx, e.target.value)} placeholder={`Opción ${idx+1}`} required />
-                                             <CFormCheck type="radio" name="respuesta_correcta" className="ms-2" checked={preguntaForm.respuesta_correcta === idx} onChange={() => setPreguntaForm({...preguntaForm, respuesta_correcta: idx})} />
-                                             {preguntaForm.opciones.length > 2 && <CIcon icon={cilTrash} className="text-danger ms-2" onClick={() => removeOpcion(idx)} style={{cursor:'pointer'}} />}
-                                         </div>
-                                     ))}
-                                     {preguntaForm.tipo_pregunta === "opcion_multiple" && <CButton size="sm" color="link" onClick={addOpcion}>+ Agregar Opción</CButton>}
-                                 </div>
-                             )}
-                             <CButton type="submit" color="success" className="w-100 text-white">Agregar Pregunta</CButton>
-                         </CForm>
-                     </CCol>
-                 </CRow>
-             </CModalBody>
+        {/* Modal de Confirmación para Eliminar Evaluación */}
+        <CModal visible={deleteModalVisible} onClose={() => setDeleteModalVisible(false)}>
+          <CModalHeader>Confirmar Eliminación</CModalHeader>
+          <CModalBody>
+            ¿Estás seguro de eliminar la evaluación <strong>"{evaluationToDelete?.titulo}"</strong>? 
+            <br /><br />
+            <span className="text-danger">
+              <strong>Esta acción no se puede deshacer.</strong> Se eliminarán todas las preguntas y resultados asociados.
+            </span>
+          </CModalBody>
+          <CModalFooter>
+            <CButton color="secondary" onClick={() => setDeleteModalVisible(false)}>
+              Cancelar
+            </CButton>
+            <CButton color="danger" onClick={handleDeleteEvaluation}>
+              Eliminar
+            </CButton>
+          </CModalFooter>
         </CModal>
-      </CRow>
+
+        {/* Modal de Confirmación para Eliminar Pregunta */}
+        <CModal visible={deletePreguntaModalVisible} onClose={() => setDeletePreguntaModalVisible(false)}>
+          <CModalHeader>Confirmar Eliminación</CModalHeader>
+          <CModalBody>
+            ¿Estás seguro de eliminar esta pregunta?
+            <br /><br />
+            <strong>"{preguntaToDelete?.enunciado?.substring(0, 100)}..."</strong>
+            <br /><br />
+            <span className="text-danger">
+              <strong>Esta acción no se puede deshacer.</strong>
+            </span>
+          </CModalBody>
+          <CModalFooter>
+            <CButton color="secondary" onClick={() => setDeletePreguntaModalVisible(false)}>
+              Cancelar
+            </CButton>
+            <CButton color="danger" onClick={handleDeletePregunta}>
+              Eliminar Pregunta
+            </CButton>
+          </CModalFooter>
+        </CModal>
+      </div>
     )
   }
 
-  // --- VISTA ESTUDIANTE ---
+  // --- VISTA ESTUDIANTE - MODIFICADA CON VALIDACIÓN DE FECHA LÍMITE Y RESULTADO ---
   return (
-    <CRow>
-      <CCol xs={12}>
-        <CCard>
-            <CCardHeader>
-                <h4>Mis Evaluaciones</h4>
-            </CCardHeader>
-            <CCardBody>
-                <div className="d-flex flex-wrap gap-3">
-                    {evaluaciones.filter(ev => ev.activa).map(ev => {
-                        const result = getStudentResult(ev.id_evaluacion)
-                        return (
-                            <CCard key={ev.id} style={{width: '18rem'}} className={result ? "border-success" : "border-primary"}>
-                                <CCardHeader>{getTipoHabilidadBadge(ev.tipo_habilidad)}</CCardHeader>
-                                <CCardBody>
-                                    <h5>{ev.titulo}</h5>
-                                    <p className="text-muted small">{ev.descripcion}</p>
-                                    <hr/>
-                                    <div className="d-flex justify-content-between align-items-center">
-                                        <small><CIcon icon={cilList}/> {ev.duracion_minutos} min</small>
-                                        {result ? (
-                                            <div className="text-end">
-                                                <CBadge color="success" className="mb-1">Completado</CBadge>
-                                                <div className="fw-bold">Nota: {result.nota_final}</div>
-                                            </div>
-                                        ) : (
-                                            <CButton color="primary" onClick={() => handleStartExam(ev)}>
-                                                <CIcon icon={cilMediaPlay} className="me-2"/> Iniciar
-                                            </CButton>
-                                        )}
-                                    </div>
-                                </CCardBody>
-                            </CCard>
-                        )
-                    })}
-                </div>
-            </CCardBody>
-        </CCard>
-      </CCol>
+    <div className="p-3">
+      <h3>Mis Evaluaciones</h3>
+      
+      {/* ALERTAS PARA ESTUDIANTE */}
+      {alertMessage && (
+        <div className="mb-3">
+          <AlertMessage 
+            response={alertMessage} 
+            type={alertMessage.type || 'danger'} 
+            onClose={closeAlert}
+          />
+        </div>
+      )}
+      
+      <CRow>
+        {evaluaciones.filter(e => e.activa).map(ev => {
+          const yaPresento = resultados.some(res =>
+            (res.id_estudiante === currentUser.id_usuario || res.id_estudiante === currentUser.id) &&
+            res.id_evaluacion === ev.id_evaluacion
+          )
+          
+          const esVencida = ev.fecha_disponible_hasta && new Date() > new Date(ev.fecha_disponible_hasta);
 
-      {/* Modal para PRESENTAR EXAMEN */}
-      <CModal visible={examModalVisible} onClose={() => !submittingExam && setExamModalVisible(false)} size="xl" backdrop="static">
-          <CModalHeader closeButton={!submittingExam}>
-              <CModalTitle>{activeExam?.titulo}</CModalTitle>
-          </CModalHeader>
-          <CModalBody className="bg-light">
-             {activeExam && (
-                 <div className="container">
-                     <CAlert color="info">
-                         <strong>Instrucciones:</strong> Responde todas las preguntas. Al finalizar presiona "Enviar Examen".
-                         Tiempo estimado: {activeExam.duracion_minutos} minutos.
-                     </CAlert>
-                     
-                     {examQuestions.map((preg, index) => (
-                         <CCard key={preg.id} className="mb-4 shadow-sm">
-                             <CCardHeader className="bg-white">
-                                 <strong>Pregunta {index + 1}</strong> 
-                                 <span className="float-end badge bg-secondary">{preg.puntos} pt(s)</span>
-                             </CCardHeader>
-                             <CCardBody>
-                                 <p className="lead" style={{fontSize: '1.1rem'}}>{preg.enunciado}</p>
-                                 
-                                 {/* Renderizar Inputs según tipo */}
-                                 {(preg.tipo_pregunta === "opcion_multiple" || preg.tipo_pregunta === "verdadero_falso") && (
-                                     <div className="d-flex flex-column gap-2">
-                                         {examOptions
-                                            .filter(opt => opt.id_pregunta === preg.id_pregunta)
-                                            .map(opt => (
-                                             <div key={opt.id} className="form-check p-2 border rounded hover-shadow">
-                                                 <input 
-                                                    className="form-check-input ms-1" 
-                                                    type="radio" 
-                                                    name={`preg_${preg.id_pregunta}`} 
-                                                    id={`opt_${opt.id}`}
-                                                    checked={String(studentAnswers[preg.id_pregunta]) === String(opt.id)} // Comparar IDs
-                                                    onChange={() => handleAnswerChange(preg.id_pregunta, opt.id)}
-                                                 />
-                                                 <label className="form-check-label ms-3 w-100" htmlFor={`opt_${opt.id}`} style={{cursor:'pointer'}}>
-                                                     {opt.texto_opcion}
-                                                 </label>
-                                             </div>
-                                         ))}
-                                     </div>
-                                 )}
+          return (
+            <CCol md={4} key={ev.id_evaluacion}>
+              <CCard className="mb-3 shadow-sm">
+                <CCardBody>
+                  <h5>{ev.titulo}</h5>
+                  <p className="text-muted small">{ev.descripcion}</p>
+                  {ev.fecha_disponible_hasta && (
+                    <div className="mb-2 small">
+                      <strong>Límite:</strong> {new Date(ev.fecha_disponible_hasta).toLocaleString()}
+                    </div>
+                  )}
+                  {yaPresento ? (
+                    <CBadge color="success" className="p-2"><CIcon icon={cilCheckCircle} className="me-1"/> Evaluación Completada</CBadge>
+                  ) : esVencida ? (
+                    <CBadge color="danger" className="p-2"><CIcon icon={cilLockLocked} className="me-1"/> Plazo Vencido</CBadge>
+                  ) : (
+                    <CButton color="primary" onClick={() => handleStartExam(ev)}>Iniciar Prueba</CButton>
+                  )}
+                </CCardBody>
+              </CCard>
+            </CCol>
+          )
+        })}
+      </CRow>
 
-                                 {(preg.tipo_pregunta === "respuesta_corta" || preg.tipo_pregunta === "audio_pronunciacion") && (
-                                     <div>
-                                         <CFormLabel>Tu respuesta:</CFormLabel>
-                                         <CFormTextarea 
-                                            rows={3}
-                                            placeholder={preg.tipo_pregunta === "audio_pronunciacion" ? "Escribe lo que escuchaste o transcribe tu respuesta..." : "Escribe tu respuesta aquí..."}
-                                            value={studentAnswers[preg.id_pregunta] || ""}
-                                            onChange={(e) => handleAnswerChange(preg.id_pregunta, e.target.value)}
-                                         />
-                                     </div>
-                                 )}
-
-                             </CCardBody>
-                         </CCard>
-                     ))}
-                 </div>
-             )}
-          </CModalBody>
-          <CModalFooter>
-              <CButton color="secondary" disabled={submittingExam} onClick={() => setExamModalVisible(false)}>Cancelar</CButton>
-              <CButton color="success text-white" disabled={submittingExam} onClick={submitExam}>
-                  {submittingExam ? <CSpinner size="sm"/> : <><CIcon icon={cilCheckCircle} className="me-2"/> Enviar Examen</>}
-              </CButton>
-          </CModalFooter>
+      {/* Modal Examen */}
+      <CModal visible={examModalVisible} size="lg" backdrop="static">
+        <CModalHeader>{activeExam?.titulo}</CModalHeader>
+        <CModalBody>
+          {examQuestions.map((p, idx) => (
+            <CCard key={p.id_pregunta || p.id || idx} className="mb-3 border-top-primary border-top-3">
+              <CCardBody>
+                <h5>{idx+1}. {p.enunciado} <CBadge color="secondary" className="float-end">{p.puntos} pts</CBadge></h5>
+                {p.tipo_pregunta === "opcion_multiple" && (
+                  <div className="mt-3">
+                    {examOptions.filter(o => o.id_pregunta === p.id_pregunta).map(opt => (
+                      <div key={opt.id_opcion} className="form-check">
+                        <input className="form-check-input" type="radio" name={`p-${p.id_pregunta}`}
+                          onChange={() => handleAnswerChange(p.id_pregunta, opt.id_opcion)} />
+                        <label className="form-check-label">{opt.texto_opcion}</label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(p.tipo_pregunta === "completacion" || p.tipo_pregunta === "lectura") && (
+                  <CFormInput className="mt-2" placeholder="Escribe tu respuesta..."
+                    onChange={e => handleAnswerChange(p.id_pregunta, e.target.value)} />
+                )}
+                {p.tipo_pregunta === "reconocimiento_voz" && (
+                  <div className="mt-2 text-center">
+                    <CButton color={isListening ? "danger" : "info"} className="text-white rounded-pill" onClick={() => startListening(p.id_pregunta)}>
+                      <CIcon icon={cilMicrophone} className="me-2" />
+                      {isListening ? "Escuchando..." : "Presiona para hablar"}
+                    </CButton>
+                    <div className="mt-2 p-2 bg-light border rounded">
+                      <strong>Tu voz: </strong> {studentAnswers[p.id_pregunta] || "..."}
+                    </div>
+                  </div>
+                )}
+              </CCardBody>
+            </CCard>
+          ))}
+        </CModalBody>
+        <CModalFooter>
+          <CButton color="secondary" onClick={() => setExamModalVisible(false)} disabled={submittingExam}>
+            Cancelar
+          </CButton>
+          <CButton color="success" className="text-white" onClick={confirmSubmitExam} disabled={submittingExam}>
+            {submittingExam ? "Enviando..." : "Entregar Examen"}
+          </CButton>
+        </CModalFooter>
       </CModal>
-    </CRow>
+
+      {/* Modal de Confirmación de Entrega (Estudiante) */}
+      <CModal visible={submitConfirmModalVisible} onClose={() => setSubmitConfirmModalVisible(false)}>
+        <CModalHeader>Confirmar Entrega</CModalHeader>
+        <CModalBody>
+          <div className="text-center mb-3">
+            <CIcon icon={cilCheckCircle} size="xl" className="text-warning" />
+            <h5 className="mt-3">¿Estás seguro de entregar el examen?</h5>
+            <p className="text-muted">
+              Una vez entregado, no podrás modificar tus respuestas.
+            </p>
+          </div>
+        </CModalBody>
+        <CModalFooter>
+          <CButton color="secondary" onClick={() => setSubmitConfirmModalVisible(false)} disabled={submittingExam}>
+            Volver al Examen
+          </CButton>
+          <CButton color="success" className="text-white" onClick={submitExam} disabled={submittingExam}>
+            {submittingExam ? "Enviando..." : "Sí, Entregar"}
+          </CButton>
+        </CModalFooter>
+      </CModal>
+
+      {/* Overlay oscuro para atenuar el examen cuando se muestra la confirmación */}
+      {submitConfirmModalVisible && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          zIndex: 1040
+        }} />
+      )}
+
+      {/* Modal de Resultados del Examen (Estudiante) */}
+      <CModal visible={examResultModalVisible} onClose={closeExamResultModal}>
+        <CModalHeader className="border-0 pb-0">
+          <div className="text-center w-100">
+            {examResult?.aprobado ? (
+              <CIcon icon={cilCheckCircle} size="xxl" className="text-success" />
+            ) : (
+              <CIcon icon={cilLockLocked} size="xxl" className="text-danger" />
+            )}
+          </div>
+        </CModalHeader>
+        <CModalBody className="text-center pt-0">
+          <h4 className="mb-3">
+            {examResult?.aprobado ? '¡Felicidades!' : 'Necesitas mejorar'}
+          </h4>
+          
+          <div className="mb-4">
+            <h1 className={`display-4 ${examResult?.aprobado ? 'text-success' : 'text-danger'}`}>
+              {examResult?.nota || 0}/20
+            </h1>
+            <div className="mt-3">
+              <CProgress 
+                value={examScoreDetails.percentage} 
+                color={examResult?.aprobado ? "success" : "danger"}
+                className="mb-2"
+                style={{ height: '20px' }}
+              />
+              <small className="text-muted">
+                {(examScoreDetails.percentage ?? 0).toFixed(1)}% de aprovechamiento
+              </small>
+            </div>
+          </div>
+          
+          <div className={`alert ${examResult?.aprobado ? 'alert-success' : 'alert-danger'}`} role="alert">
+            <h5 className="alert-heading">
+              {examResult?.aprobado ? 'Aprobado' : 'No Aprobado'}
+            </h5>
+            <p className="mb-0">
+              {examResult?.aprobado 
+                ? 'Has superado la evaluación satisfactoriamente.' 
+                : 'No alcanzaste la nota mínima para aprobar (10/20).'
+              }
+            </p>
+          </div>
+          
+          <div className="mt-4">
+            <p className="text-muted small">
+              Resultado registrado el {examResult?.fecha || 'hoy'}
+            </p>
+          </div>
+        </CModalBody>
+        <CModalFooter className="border-0 justify-content-center">
+          <CButton color="primary" onClick={closeExamResultModal} className="px-5">
+            Ver Mis Evaluaciones
+          </CButton>
+        </CModalFooter>
+      </CModal>
+    </div>
   )
 }
 
