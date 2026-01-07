@@ -12,6 +12,10 @@ import CIcon from "@coreui/icons-react"
 import { cilPlus, cilTrash, cilPencil, cilInfo } from "@coreui/icons"
 import AlertMessage from "../../components/ui/AlertMessage"
 
+// 1. IMPORTAR SUPABASE
+import { supabase } from '../../lib/supabase';  
+import { activitySchema } from '../../../schemas/activities.schema'
+
 const Activities = () => {
   const [actividades, setActividades] = useState([])
   const [contenidos, setContenidos] = useState([])
@@ -33,36 +37,51 @@ const Activities = () => {
     fecha_vencimiento: "",
     id_contenido: "",
   })
+  const [formErrors, setFormErrors] = useState({})
 
   useEffect(() => {
-    // load current user and permissions
     try {
       const stored = localStorage.getItem('user')
       if (stored) {
         const parsed = JSON.parse(stored)
-        setCurrentUser(parsed)
-        const role = Number(parsed.id_role ?? parsed.role ?? parsed.role_id ?? -1)
+        const normalized = {
+          ...parsed,
+          id_usuario: parsed.id_usuario || parsed.id,
+          id: parsed.id || parsed.id_usuario,
+        }
+        setCurrentUser(normalized)
+        const role = Number(normalized.id_role ?? normalized.role ?? -1)
         setHasManagePermission(role === 1 || role === 3)
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) { /* ignore */ }
     fetchData()
   }, [])
 
+  // 2. FETCH DATA CON SUPABASE (Usando Joins)
   const fetchData = async () => {
     try {
-      const [actividadesRes, contenidosRes] = await Promise.all([
-        fetch("http://localhost:3001/actividades"),
-        fetch("http://localhost:3001/contenidos"),
-      ])
-      const actData = await actividadesRes.json()
-      const contData = await contenidosRes.json()
-      setActividades(actData)
-      setContenidos(contData)
-      setLoading(false)
+      setLoading(true)
+      
+      // Traemos actividades y el título del contenido relacionado en un solo paso
+      const { data: actData, error: actError } = await supabase
+        .from('actividades')
+        .select(`
+          *,
+          contenidos (titulo)
+        `)
+      
+      const { data: contData, error: contError } = await supabase
+        .from('contenidos')
+        .select('id, titulo')
+
+      if (actError || contError) throw actError || contError
+
+      setActividades(actData || [])
+      setContenidos(contData || [])
     } catch (error) {
-      console.error("Error fetching data:", error)
+      console.error("Error fetching data:", error.message)
+      setAlert({ message: "Error al cargar datos", type: "danger" })
+    } finally {
       setLoading(false)
     }
   }
@@ -70,58 +89,80 @@ const Activities = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target
     setFormData({ ...formData, [name]: value })
+    if (formErrors[name]) {
+      const copy = { ...formErrors }
+      delete copy[name]
+      setFormErrors(copy)
+    }
   }
 
+  // 3. SUBMIT (CREATE O UPDATE) CON SUPABASE
   const handleSubmit = async (e) => {
     e.preventDefault()
 
     if (!hasManagePermission) {
-      setAlert({ message: 'No tienes permiso para crear/editar actividades', type: 'danger' })
+      setAlert({ message: 'No tienes permiso', type: 'danger' })
       return
     }
 
-    // IMPORTANTE: Mantenemos id_contenido como String porque en tu db.json los IDs son alfanuméricos ("e627")
-    const activityData = {
+    setFormErrors({})
+
+    const payload = {
       nombre: formData.nombre,
       instrucciones: formData.instrucciones,
       tipo: formData.tipo,
       fecha_vencimiento: formData.fecha_vencimiento,
-      id_contenido: formData.id_contenido, 
+      id_contenido: formData.id_contenido,
     }
+
+    const parsed = activitySchema.safeParse(payload)
+    if (!parsed.success) {
+      const errors = {}
+      parsed.error.issues.forEach(i => {
+        const key = i.path && i.path.length ? i.path[0] : '_'
+        errors[key] = i.message
+      })
+      setFormErrors(errors)
+      return
+    }
+
+    const activityData = payload
 
     try {
       if (editMode) {
-        await fetch(`http://localhost:3001/actividades/${formData.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(activityData),
-        })
-        setAlert({ message: "Actividad actualizada correctamente", type: "success" })
+        const { error } = await supabase
+          .from('actividades')
+          .update(activityData)
+          .eq('id', formData.id)
+        
+        if (error) throw error
+        setAlert({ message: "Actividad actualizada", type: "success" })
       } else {
-        await fetch("http://localhost:3001/actividades", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(activityData),
-        })
-        setAlert({ message: "Actividad creada con éxito", type: "success" })
+        // La tabla `actividades` no contiene `id_docente` en el esquema; insertar solo activityData
+        const { error } = await supabase
+          .from('actividades')
+          .insert([activityData])
+        
+        if (error) throw error
+        setAlert({ message: "Actividad creada", type: "success" })
       }
+      setFormErrors({})
       fetchData()
       handleCloseModal()
     } catch (error) {
-      setAlert({ message: "Error al procesar la solicitud", type: "danger" })
+      setAlert({ message: "Error: " + error.message, type: "danger" })
     }
   }
 
+  // 4. DELETE CON SUPABASE
   const handleDelete = async () => {
-    if (!hasManagePermission) {
-      setAlert({ message: 'No tienes permiso para eliminar actividades', type: 'danger' })
-      setDeleteModal({ visible: false, id: null })
-      return
-    }
     try {
-      await fetch(`http://localhost:3001/actividades/${deleteModal.id}`, {
-        method: "DELETE",
-      })
+      const { error } = await supabase
+        .from('actividades')
+        .delete()
+        .eq('id', deleteModal.id)
+      
+      if (error) throw error
       setAlert({ message: "Actividad eliminada", type: "success" })
       setDeleteModal({ visible: false, id: null })
       fetchData()
@@ -131,10 +172,6 @@ const Activities = () => {
   }
 
   const handleEdit = (activity) => {
-    if (!hasManagePermission) {
-      setAlert({ message: 'No tienes permiso para editar actividades', type: 'danger' })
-      return
-    }
     setFormData({
       id: activity.id,
       nombre: activity.nombre,
@@ -145,24 +182,19 @@ const Activities = () => {
     })
     setEditMode(true)
     setVisible(true)
+    setFormErrors({})
   }
 
   const handleCloseModal = () => {
     setVisible(false)
     setEditMode(false)
     setFormData({ id: null, nombre: "", instrucciones: "", tipo: "tarea", fecha_vencimiento: "", id_contenido: "" })
+    setFormErrors({})
   }
 
   const getTipoBadge = (tipo) => {
     const colors = { tarea: "primary", ensayo: "warning", lectura: "info", practica: "success", quiz: "danger" }
     return <CBadge color={colors[tipo] || "secondary"}>{(tipo || "N/A").toUpperCase()}</CBadge>
-  }
-
-  // CORRECCIÓN CLAVE: Buscar por c.id ya que c.id_contenido no existe en contenidos
-  const getContenidoNombre = (idContenido) => {
-    if (!idContenido) return "Sin relación"
-    const contenido = contenidos.find((c) => c.id === idContenido)
-    return contenido ? contenido.titulo : "Contenido no encontrado"
   }
 
   if (loading) return <div className="text-center p-5"><CSpinner color="primary" /></div>
@@ -172,20 +204,18 @@ const Activities = () => {
       <CCol xs={12}>
         {alert && <AlertMessage response={alert} type={alert.type} onClose={() => setAlert(null)} />}
 
-        <CCard className="mb-4">
-          <CCardHeader className="d-flex justify-content-between align-items-center">
-            <strong>Módulo de Actividades</strong>
-            {hasManagePermission ? (
-              <CButton color="primary" onClick={() => { setEditMode(false); setVisible(true); }}>
+        <CCard className="mb-4 shadow-sm">
+          <CCardHeader className="d-flex justify-content-between align-items-center bg-white">
+            <strong className="fs-5">Módulo de Actividades</strong>
+            {hasManagePermission && (
+              <CButton color="primary" onClick={() => { setEditMode(false); setVisible(true); setFormErrors({}); }}>
                 <CIcon icon={cilPlus} className="me-2" /> Nueva Actividad
               </CButton>
-            ) : (
-              <div className="text-muted small">Solo docentes y administradores pueden crear actividades</div>
             )}
           </CCardHeader>
           <CCardBody>
-            <CTable hover responsive>
-              <CTableHead>
+            <CTable hover responsive align="middle">
+              <CTableHead color="light">
                 <CTableRow>
                   <CTableHeaderCell>Nombre</CTableHeaderCell>
                   <CTableHeaderCell>Tipo</CTableHeaderCell>
@@ -199,14 +229,17 @@ const Activities = () => {
                   <CTableRow key={activity.id}>
                     <CTableDataCell><strong>{activity.nombre}</strong></CTableDataCell>
                     <CTableDataCell>{getTipoBadge(activity.tipo)}</CTableDataCell>
-                    <CTableDataCell>{getContenidoNombre(activity.id_contenido)}</CTableDataCell>
+                    <CTableDataCell>
+                      {/* Usamos el Join de Supabase directamente */}
+                      {activity.contenidos?.titulo || "Sin relación"}
+                    </CTableDataCell>
                     <CTableDataCell>{activity.fecha_vencimiento}</CTableDataCell>
                     <CTableDataCell>
                       <div className="d-flex gap-2">
                         <CButton color="secondary" size="sm" onClick={() => setInfoModal({ visible: true, data: activity })}>
                           <CIcon icon={cilInfo} style={{color: 'white'}} />
                         </CButton>
-                        {hasManagePermission ? (
+                        {hasManagePermission && (
                           <>
                             <CButton color="info" size="sm" onClick={() => handleEdit(activity)}>
                               <CIcon icon={cilPencil} style={{color: 'white'}} />
@@ -215,8 +248,6 @@ const Activities = () => {
                               <CIcon icon={cilTrash} />
                             </CButton>
                           </>
-                        ) : (
-                          <div className="text-muted small">Sin permisos</div>
                         )}
                       </div>
                     </CTableDataCell>
@@ -230,16 +261,16 @@ const Activities = () => {
 
       {/* MODAL INFO */}
       <CModal visible={infoModal.visible} onClose={() => setInfoModal({ visible: false, data: null })}>
-        <CModalHeader><CModalTitle>Detalles</CModalTitle></CModalHeader>
+        <CModalHeader><CModalTitle>Detalles de Actividad</CModalTitle></CModalHeader>
         <CModalBody>
           {infoModal.data && (
             <>
               <h5>{infoModal.data.nombre}</h5>
               <p className="mt-3"><strong>Instrucciones:</strong></p>
-              <div className="bg-light p-3 border rounded">{infoModal.data.instrucciones}</div>
-              <CListGroup flush className="mt-3">
+              <div className="bg-light p-3 border rounded mb-3">{infoModal.data.instrucciones}</div>
+              <CListGroup flush>
                 <CListGroupItem><strong>Tipo:</strong> {getTipoBadge(infoModal.data.tipo)}</CListGroupItem>
-                <CListGroupItem><strong>Relacionado con:</strong> {getContenidoNombre(infoModal.data.id_contenido)}</CListGroupItem>
+                <CListGroupItem><strong>Contenido:</strong> {infoModal.data.contenidos?.titulo || "N/A"}</CListGroupItem>
                 <CListGroupItem><strong>Vence el:</strong> {infoModal.data.fecha_vencimiento}</CListGroupItem>
               </CListGroup>
             </>
@@ -254,16 +285,16 @@ const Activities = () => {
           <CModalBody>
             <div className="mb-3">
               <CFormLabel>Nombre</CFormLabel>
-              <CFormInput name="nombre" value={formData.nombre} onChange={handleInputChange} required />
+              <CFormInput name="nombre" value={formData.nombre} onChange={handleInputChange} required invalid={!!formErrors.nombre} feedback={formErrors.nombre} />
             </div>
             <div className="mb-3">
               <CFormLabel>Instrucciones</CFormLabel>
-              <CFormTextarea name="instrucciones" rows="3" value={formData.instrucciones} onChange={handleInputChange} required />
+              <CFormTextarea name="instrucciones" rows="3" value={formData.instrucciones} onChange={handleInputChange} required invalid={!!formErrors.instrucciones} feedback={formErrors.instrucciones} />
             </div>
             <CRow>
-              <CCol md={6} className="mb-3">
+                <CCol md={6} className="mb-3">
                 <CFormLabel>Tipo</CFormLabel>
-                <CFormSelect name="tipo" value={formData.tipo} onChange={handleInputChange}>
+                <CFormSelect name="tipo" value={formData.tipo} onChange={handleInputChange} invalid={!!formErrors.tipo} feedback={formErrors.tipo}>
                   <option value="tarea">Tarea</option>
                   <option value="ensayo">Ensayo</option>
                   <option value="lectura">Lectura</option>
@@ -273,12 +304,12 @@ const Activities = () => {
               </CCol>
               <CCol md={6} className="mb-3">
                 <CFormLabel>Fecha Vencimiento</CFormLabel>
-                <CFormInput type="date" name="fecha_vencimiento" value={formData.fecha_vencimiento} onChange={handleInputChange} required />
+                <CFormInput type="date" name="fecha_vencimiento" value={formData.fecha_vencimiento} onChange={handleInputChange} required invalid={!!formErrors.fecha_vencimiento} feedback={formErrors.fecha_vencimiento} />
               </CCol>
             </CRow>
             <div className="mb-3">
               <CFormLabel>Contenido Relacionado</CFormLabel>
-              <CFormSelect name="id_contenido" value={formData.id_contenido} onChange={handleInputChange} required>
+              <CFormSelect name="id_contenido" value={formData.id_contenido} onChange={handleInputChange} required invalid={!!formErrors.id_contenido} feedback={formErrors.id_contenido}>
                 <option value="">Seleccione un contenido</option>
                 {contenidos.map((c) => (
                   <option key={c.id} value={c.id}>{c.titulo}</option>
@@ -287,19 +318,19 @@ const Activities = () => {
             </div>
           </CModalBody>
           <CModalFooter>
-            <CButton color="secondary" onClick={handleCloseModal}>Cerrar</CButton>
-            <CButton color="primary" type="submit">Guardar</CButton>
+            <CButton color="secondary" onClick={handleCloseModal}>Cancelar</CButton>
+            <CButton color="primary" type="submit">{editMode ? "Actualizar" : "Guardar"}</CButton>
           </CModalFooter>
         </CForm>
       </CModal>
 
       {/* MODAL ELIMINAR */}
       <CModal visible={deleteModal.visible} onClose={() => setDeleteModal({ visible: false, id: null })}>
-        <CModalHeader><CModalTitle>Confirmar</CModalTitle></CModalHeader>
-        <CModalBody>¿Deseas eliminar esta actividad?</CModalBody>
+        <CModalHeader><CModalTitle>Confirmar eliminación</CModalTitle></CModalHeader>
+        <CModalBody>¿Estás seguro de que deseas eliminar esta actividad? Esta acción no se puede deshacer.</CModalBody>
         <CModalFooter>
-          <CButton color="secondary" onClick={() => setDeleteModal({ visible: false, id: null })}>No</CButton>
-          <CButton color="danger" className="text-white" onClick={handleDelete}>Sí, eliminar</CButton>
+          <CButton color="secondary" onClick={() => setDeleteModal({ visible: false, id: null })}>Cancelar</CButton>
+          <CButton color="danger" className="text-white" onClick={handleDelete}>Eliminar</CButton>
         </CModalFooter>
       </CModal>
     </CRow>

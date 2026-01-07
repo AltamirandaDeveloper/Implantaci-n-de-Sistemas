@@ -24,38 +24,39 @@ import {
   CAvatar,
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
-import { 
-  cilPencil, 
-  cilTrash, 
-  cilUserPlus, 
-  cilSearch, 
+import {
+  cilPencil,
+  cilTrash,
+  cilUserPlus,
+  cilSearch,
   cilWarning,
-  cilUser 
+  cilUser
 } from '@coreui/icons'
-import axios from 'axios'
+
+// Supabase client
+import { supabase } from '../../lib/supabase'
 
 // Importamos tu componente de alerta personalizado
-import AlertMessage from '../../components/ui/AlertMessage' 
-
-const API_URL = 'http://localhost:3001'
+import AlertMessage from '../../components/ui/AlertMessage'
+// Zod schemas
+import { createUserSchema, updateUserSchema } from '../../../schemas/users.schema'
 
 const Users = () => {
   const [usuarios, setUsuarios] = useState([])
   const [roles, setRoles] = useState([])
   const [grados, setGrados] = useState([])
   const [gradosPorUsuario, setGradosPorUsuario] = useState({})
-  
+
   const [loading, setLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // Estado para manejar tu alerta personalizada
   const [alertData, setAlertData] = useState(null)
+  const [formErrors, setFormErrors] = useState({})
 
-  // Estados para modales
+  // Modales y formularios
   const [addModal, setAddModal] = useState(false)
   const [editModal, setEditModal] = useState(false)
   const [detailModal, setDetailModal] = useState(false)
-  const [deleteModal, setDeleteModal] = useState(false) // 🔥 NUEVO MODAL DE CONFIRMACIÓN
+  const [deleteModal, setDeleteModal] = useState(false)
 
   const [newUser, setNewUser] = useState({
     nombre: '',
@@ -69,21 +70,31 @@ const Users = () => {
 
   const [userToEdit, setUserToEdit] = useState(null)
   const [userToView, setUserToView] = useState(null)
-  const [userToDelete, setUserToDelete] = useState(null) // 🔥 Usuario a eliminar
-  const [gradosSeleccionados, setGradosSeleccionados] = useState([])
+  const [userToDelete, setUserToDelete] = useState(null)
+  const [gradosSeleccionados, setGradosSeleccionados] = useState([]) // always an array
 
-  /* ================= FETCH DATA & INIT ================= */
-  
+  /* ================= FETCH DATA & INIT (Supabase) ================= */
+
   const fetchUsuarios = async (currentGrados = grados) => {
     try {
       setLoading(true)
-      const res = await axios.get(`${API_URL}/usuarios`)
-      setUsuarios(res.data)
-      await fetchGradosUsuarios(res.data, currentGrados)
+      const usersRes = await supabase
+        .from('usuarios')
+        .select(`
+          *,
+          estudiantes (id, id_grado),
+          docente (id, id_usuario, docente_grados (id, id_grado))
+        `)
+        .order('fecha_registro', { ascending: false })
+
+      if (usersRes.error) throw usersRes.error
+      const users = usersRes.data || []
+      setUsuarios(users)
+      await fetchGradosUsuarios(users, currentGrados)
     } catch (err) {
-      setAlertData({ 
-        type: 'danger', 
-        response: { message: 'Error al cargar usuarios' } 
+      setAlertData({
+        type: 'danger',
+        response: { message: 'Error al cargar usuarios' }
       })
       console.error(err)
     } finally {
@@ -96,21 +107,20 @@ const Users = () => {
       try {
         setLoading(true)
         const [rolesRes, gradosRes] = await Promise.all([
-          axios.get(`${API_URL}/roles`),
-          axios.get(`${API_URL}/grados`)
+          supabase.from('roles').select('*'),
+          supabase.from('grados').select('*').order('id', { ascending: true })
         ])
-        
-        setRoles(rolesRes.data)
-        setGrados(gradosRes.data)
 
-        const usuariosRes = await axios.get(`${API_URL}/usuarios`)
-        setUsuarios(usuariosRes.data)
-        
-        await fetchGradosUsuarios(usuariosRes.data, gradosRes.data)
+        if (rolesRes.error) throw rolesRes.error
+        if (gradosRes.error) throw gradosRes.error
 
+        setRoles(rolesRes.data || [])
+        setGrados(gradosRes.data || [])
+
+        await fetchUsuarios(gradosRes.data || [])
       } catch (err) {
         console.error('Error inicializando datos:', err)
-        setAlertData({ type: 'danger', response: { message: 'Error de conexión con el servidor' } })
+        setAlertData({ type: 'danger', response: { message: 'Error de conexión con Supabase' } })
       } finally {
         setLoading(false)
       }
@@ -121,31 +131,43 @@ const Users = () => {
 
   const fetchGradosUsuarios = async (usuariosList, listaGrados) => {
     try {
-      const gradosReference = listaGrados || grados 
+      const gradosReference = Array.isArray(listaGrados) ? listaGrados : (Array.isArray(grados) ? grados : [])
 
       const [docenteRes, docenteGradosRes, estudiantesRes] = await Promise.all([
-        axios.get(`${API_URL}/docente`),
-        axios.get(`${API_URL}/docente_grados`),
-        axios.get(`${API_URL}/estudiantes`)
+        supabase.from('docente').select('*'),
+        supabase.from('docente_grados').select('*'),
+        supabase.from('estudiantes').select('*'),
       ])
 
+      if (docenteRes.error) throw docenteRes.error
+      if (docenteGradosRes.error) throw docenteGradosRes.error
+      if (estudiantesRes.error) throw estudiantesRes.error
+
+      const docentes = Array.isArray(docenteRes.data) ? docenteRes.data : []
+      const docenteGrados = Array.isArray(docenteGradosRes.data) ? docenteGradosRes.data : []
+      const estudiantes = Array.isArray(estudiantesRes.data) ? estudiantesRes.data : []
+      const usuariosArr = Array.isArray(usuariosList) ? usuariosList : []
+
       const map = {}
-      usuariosList.forEach((u) => {
-        if (u.id_role === 3) { // docente
-          const d = docenteRes.data.find((doc) => doc.id_usuario === u.id)
+      usuariosArr.forEach((u) => {
+        const role = Number(u.id_role)
+        if (role === 3) { // docente
+          const d = docentes.find((doc) => String(doc.id_usuario) === String(u.id))
           if (d) {
-            const rel = docenteGradosRes.data.filter((r) => r.id_docente === d.id)
-            map[u.id] = rel.map((r) => {
-              const g = gradosReference.find((gr) => gr.id_grado === r.id_grado)
-              return g ? `Grado ${g.nombre}` : null
-            }).filter(Boolean)
+            const rel = docenteGrados.filter((r) => r.id_docente === d.id)
+            map[u.id] = rel
+              .map((r) => {
+                const g = gradosReference.find((gr) => Number(gr.id) === Number(r.id_grado))
+                return g ? `Grado ${g.nombre}` : null
+              })
+              .filter(Boolean)
           } else {
             map[u.id] = []
           }
-        } else if (u.id_role === 2) { // estudiante
-          const est = estudiantesRes.data.find((e) => e.id_usuario === u.id)
+        } else if (role === 2) { // estudiante
+          const est = estudiantes.find((e) => String(e.id_usuario) === String(u.id))
           if (est) {
-            const g = gradosReference.find((gr) => gr.id_grado === est.id_grado)
+            const g = gradosReference.find((gr) => Number(gr.id) === Number(est.id_grado))
             map[u.id] = g ? [`Grado ${g.nombre}`] : []
           } else {
             map[u.id] = []
@@ -154,16 +176,24 @@ const Users = () => {
           map[u.id] = []
         }
       })
+
       setGradosPorUsuario(map)
     } catch (err) {
       console.error('Error al cargar grados por usuario:', err)
+      setGradosPorUsuario({})
     }
   }
 
-  /* ================= HANDLERS ================= */
+  /* ================= HELPERS & HANDLERS ================= */
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setNewUser({ ...newUser, [name]: value })
+    if (formErrors[name]) {
+      const copy = { ...formErrors }
+      delete copy[name]
+      setFormErrors(copy)
+    }
     if (name === 'id_role') {
       setGradosSeleccionados([])
     }
@@ -172,14 +202,23 @@ const Users = () => {
   const handleEditChange = (e) => {
     const { name, value } = e.target
     setUserToEdit({ ...userToEdit, [name]: value })
+    if (formErrors[name]) {
+      const copy = { ...formErrors }
+      delete copy[name]
+      setFormErrors(copy)
+    }
     if (name === 'id_role') {
       setGradosSeleccionados([])
     }
   }
 
   const handleGradoChange = (e) => {
-    const values = Array.from(e.target.selectedOptions, option => Number(option.value))
-    setGradosSeleccionados(values)
+    if (e.target.multiple) {
+      const values = Array.from(e.target.selectedOptions, option => Number(option.value))
+      setGradosSeleccionados(values)
+    } else {
+      setGradosSeleccionados([Number(e.target.value)])
+    }
   }
 
   const resetForm = () => {
@@ -189,76 +228,105 @@ const Users = () => {
     })
     setGradosSeleccionados([])
     setAlertData(null)
+    setFormErrors({})
   }
 
   /* ================= CREATE ================= */
   const handleCreate = async () => {
     try {
       setAlertData(null)
+      setFormErrors({})
       setIsSubmitting(true)
-      
-      if (!newUser.nombre || !newUser.apellido || !newUser.email || !newUser.password || !newUser.id_role) {
-        setAlertData({ 
-          type: 'danger', 
-          response: { message: 'Por favor complete todos los campos requeridos' } 
+      const roleId = Number(newUser.id_role)
+
+      // Build payload for validation
+      const payload = {
+        nombre: newUser.nombre,
+        apellido: newUser.apellido,
+        cedula: newUser.cedula,
+        telefono: newUser.telefono,
+        email: newUser.email,
+        password: newUser.password,
+        id_role: roleId,
+      }
+      if (roleId === 2) payload.grados = gradosSeleccionados
+      if (roleId === 3) payload.grados = gradosSeleccionados
+
+      // Choose schema: omit grados validation for admins (role 1)
+      const schema = roleId === 1 ? createUserSchema.omit({ grados: true }) : createUserSchema
+      const parsed = schema.safeParse(payload)
+      if (!parsed.success) {
+        const errors = {}
+        parsed.error.issues.forEach((i) => {
+          const key = i.path && i.path.length ? i.path[0] : '_'
+          errors[key] = i.message
         })
+        setFormErrors(errors)
         setIsSubmitting(false)
         return
       }
 
-      const roleId = Number(newUser.id_role)
-      
-      if (roleId === 2 && gradosSeleccionados.length !== 1) {
+      // Additional role-specific checks (business rules)
+      if (roleId === 2 && (!gradosSeleccionados || gradosSeleccionados.length !== 1)) {
         setAlertData({ type: 'danger', response: { message: 'Seleccione exactamente un grado para el estudiante' } })
         setIsSubmitting(false)
         return
       }
-
-      if (roleId === 3 && gradosSeleccionados.length === 0) {
+      if (roleId === 3 && (!gradosSeleccionados || gradosSeleccionados.length === 0)) {
         setAlertData({ type: 'danger', response: { message: 'Seleccione al menos un grado para el docente' } })
         setIsSubmitting(false)
         return
       }
 
+      // Generador de UUID (usa crypto.randomUUID si está disponible)
+      const genUUID = () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+        // Fallback simple (RFC4122 v4-like)
+        const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1)
+        return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`
+      }
+
+      const newId = genUUID()
+
       const usuarioData = {
-        ...newUser,
+        id: newId,
+        nombre: newUser.nombre,
+        apellido: newUser.apellido,
+        cedula: newUser.cedula,
+        email: newUser.email,
+        password: newUser.password,
+        telefono: newUser.telefono,
         id_role: roleId,
         fecha_registro: new Date().toISOString(),
       }
-      
-      const usuarioRes = await axios.post(`${API_URL}/usuarios`, usuarioData)
+
+      const usuarioRes = await supabase.from('usuarios').insert([usuarioData]).select().single()
+      if (usuarioRes.error) throw usuarioRes.error
       const id_usuario = usuarioRes.data.id
 
       if (roleId === 3) {
-        const docenteRes = await axios.post(`${API_URL}/docente`, { id_usuario })
+        const docenteRes = await supabase.from('docente').insert([{ id_usuario }]).select().single()
+        if (docenteRes.error) throw docenteRes.error
         const id_docente = docenteRes.data.id
-        for (const id_grado of gradosSeleccionados) {
-          await axios.post(`${API_URL}/docente_grados`, { id_docente, id_grado })
+        if (gradosSeleccionados.length) {
+          const pivots = gradosSeleccionados.map(id_grado => ({ id_docente, id_grado }))
+          const pivotRes = await supabase.from('docente_grados').insert(pivots)
+          if (pivotRes.error) throw pivotRes.error
         }
       }
 
       if (roleId === 2 && gradosSeleccionados.length === 1) {
-        await axios.post(`${API_URL}/estudiantes`, {
-          id_usuario,
-          id_grado: gradosSeleccionados[0],
-        })
+        const estRes = await supabase.from('estudiantes').insert([{ id_usuario, id_grado: gradosSeleccionados[0] }])
+        if (estRes.error) throw estRes.error
       }
 
       setAddModal(false)
       resetForm()
       await fetchUsuarios()
-      
-      setAlertData({ 
-        type: 'success', 
-        response: { message: 'Usuario creado exitosamente' } 
-      })
-
+      setAlertData({ type: 'success', response: { message: 'Usuario creado exitosamente' } })
     } catch (err) {
       console.error('Error al crear usuario:', err)
-      setAlertData({ 
-        type: 'danger', 
-        response: err.response?.data || { message: 'Error al crear usuario' } 
-      })
+      setAlertData({ type: 'danger', response: { message: err.message || 'Error al crear usuario' } })
     } finally {
       setIsSubmitting(false)
     }
@@ -271,17 +339,18 @@ const Users = () => {
       setGradosSeleccionados([])
       setAlertData(null)
 
-      if (user.id_role === 3) {
-        const docenteRes = await axios.get(`${API_URL}/docente?id_usuario=${user.id}`)
+      if (Number(user.id_role) === 3) {
+        const docenteRes = await supabase.from('docente').select('*').eq('id_usuario', user.id)
+        if (docenteRes.error) throw docenteRes.error
         if (docenteRes.data.length > 0) {
           const id_docente = docenteRes.data[0].id
-          const relRes = await axios.get(`${API_URL}/docente_grados?id_docente=${id_docente}`)
-          if (relRes.data.length > 0) {
-            setGradosSeleccionados(relRes.data.map(r => r.id_grado))
-          }
+          const relRes = await supabase.from('docente_grados').select('*').eq('id_docente', id_docente)
+          if (relRes.error) throw relRes.error
+          setGradosSeleccionados(relRes.data.map(r => r.id_grado))
         }
-      } else if (user.id_role === 2) {
-        const estRes = await axios.get(`${API_URL}/estudiantes?id_usuario=${user.id}`)
+      } else if (Number(user.id_role) === 2) {
+        const estRes = await supabase.from('estudiantes').select('*').eq('id_usuario', user.id)
+        if (estRes.error) throw estRes.error
         if (estRes.data.length > 0) {
           setGradosSeleccionados([estRes.data[0].id_grado])
         }
@@ -297,25 +366,160 @@ const Users = () => {
   const handleSaveEdit = async () => {
     try {
       setAlertData(null)
+      setFormErrors({})
       setIsSubmitting(true)
-      
       if (!userToEdit) return
 
-      if (!userToEdit.nombre || !userToEdit.apellido || !userToEdit.email || !userToEdit.id_role) {
-        setAlertData({ type: 'danger', response: { message: 'Complete los campos requeridos' } })
+      const roleId = Number(userToEdit.id_role)
+
+      // Build payload for validation
+      const payload = {
+        nombre: userToEdit.nombre,
+        apellido: userToEdit.apellido,
+        cedula: userToEdit.cedula,
+        telefono: userToEdit.telefono,
+        email: userToEdit.email,
+        password: userToEdit.password || '',
+        id_role: roleId,
+      }
+      if (roleId === 2 || roleId === 3) payload.grados = gradosSeleccionados
+
+      // Choose schema: omit grados validation for admins (role 1)
+      const schema = roleId === 1 ? updateUserSchema.omit({ grados: true }) : updateUserSchema
+      const parsed = schema.safeParse(payload)
+      if (!parsed.success) {
+        const errors = {}
+        parsed.error.issues.forEach((i) => {
+          const key = i.path && i.path.length ? i.path[0] : '_'
+          errors[key] = i.message
+        })
+        setFormErrors(errors)
         setIsSubmitting(false)
         return
       }
 
+      // Business rules for grados (give inline feedback)
+      if (roleId === 2 && (!gradosSeleccionados || gradosSeleccionados.length !== 1)) {
+        setFormErrors({ grados: 'Seleccione exactamente un grado para el estudiante' })
+        setIsSubmitting(false)
+        return
+      }
+      if (roleId === 3 && (!gradosSeleccionados || gradosSeleccionados.length === 0)) {
+        setFormErrors({ grados: 'Seleccione al menos un grado para el docente' })
+        setIsSubmitting(false)
+        return
+      }
+
+      const usuarioData = {
+        nombre: userToEdit.nombre,
+        apellido: userToEdit.apellido,
+        cedula: userToEdit.cedula,
+        email: userToEdit.email,
+        telefono: userToEdit.telefono,
+        id_role: roleId,
+      }
+      if (userToEdit.password && userToEdit.password.trim() !== '') usuarioData.password = userToEdit.password
+
+      const upd = await supabase.from('usuarios').update(usuarioData).eq('id', userToEdit.id)
+      if (upd.error) throw upd.error
+
+      const id_usuario = userToEdit.id
+
+      if (roleId === 3) {
+        let docQ = await supabase.from('docente').select('*').eq('id_usuario', id_usuario)
+        if (docQ.error) throw docQ.error
+        let id_docente
+        if (docQ.data.length === 0) {
+          const insDoc = await supabase.from('docente').insert([{ id_usuario }]).select().single()
+          if (insDoc.error) throw insDoc.error
+          id_docente = insDoc.data.id
+        } else {
+          id_docente = docQ.data[0].id
+          const delP = await supabase.from('docente_grados').delete().eq('id_docente', id_docente)
+          if (delP.error) throw delP.error
+        }
+        if (gradosSeleccionados.length) {
+          const pivots = gradosSeleccionados.map(gid => ({ id_docente, id_grado: gid }))
+          const pivIns = await supabase.from('docente_grados').insert(pivots)
+          if (pivIns.error) throw pivIns.error
+        }
+      }
+
+      if (roleId === 2) {
+        const estQ = await supabase.from('estudiantes').select('*').eq('id_usuario', id_usuario)
+        if (estQ.error) throw estQ.error
+        if (estQ.data.length === 0) {
+          const ins = await supabase.from('estudiantes').insert([{ id_usuario, id_grado: gradosSeleccionados[0] }])
+          if (ins.error) throw ins.error
+        } else {
+          const updEst = await supabase.from('estudiantes').update({ id_grado: gradosSeleccionados[0] }).eq('id', estQ.data[0].id)
+          if (updEst.error) throw updEst.error
+        }
+      }
+
+      setEditModal(false)
+      setUserToEdit(null)
+      setGradosSeleccionados([])
+      setFormErrors({})
+      await fetchUsuarios()
+      setAlertData({ type: 'success', response: { message: 'Usuario actualizado exitosamente' } })
+    } catch (err) {
+      console.error('Error edit:', err)
+      setAlertData({
+        type: 'danger',
+        response: { message: err.message || 'Error al actualizar usuario' }
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  /* ================= DELETE ================= */
+  const handleDeleteClick = (user) => {
+    setUserToDelete(user)
+    setDeleteModal(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!userToDelete) return
+    try {
+      setIsSubmitting(true)
       const roleId = Number(userToEdit.id_role)
-      
-      if (roleId === 2 && gradosSeleccionados.length !== 1) {
+
+      // Build payload for validation
+      const payload = {
+        nombre: userToEdit.nombre,
+        apellido: userToEdit.apellido,
+        cedula: userToEdit.cedula,
+        telefono: userToEdit.telefono,
+        email: userToEdit.email,
+        password: userToEdit.password || '',
+        id_role: roleId,
+      }
+      if (roleId === 2) payload.grados = gradosSeleccionados
+      if (roleId === 3) payload.grados = gradosSeleccionados
+
+      // Choose schema for update (omit grados for admins)
+      const schema = roleId === 1 ? updateUserSchema.omit({ grados: true }) : updateUserSchema
+      const parsed = schema.safeParse(payload)
+      if (!parsed.success) {
+        const errors = {}
+        parsed.error.issues.forEach((i) => {
+          const key = i.path && i.path.length ? i.path[0] : '_'
+          errors[key] = i.message
+        })
+        setFormErrors(errors)
+        setIsSubmitting(false)
+        return
+      }
+
+      if (roleId === 2 && (!gradosSeleccionados || gradosSeleccionados.length !== 1)) {
         setAlertData({ type: 'danger', response: { message: 'Seleccione un grado para el estudiante' } })
         setIsSubmitting(false)
         return
       }
 
-      if (roleId === 3 && gradosSeleccionados.length === 0) {
+      if (roleId === 3 && (!gradosSeleccionados || gradosSeleccionados.length === 0)) {
         setAlertData({ type: 'danger', response: { message: 'Seleccione grados para el docente' } })
         setIsSubmitting(false)
         return
@@ -329,112 +533,13 @@ const Users = () => {
         telefono: userToEdit.telefono,
         id_role: roleId,
       }
-      
-      if (userToEdit.password && userToEdit.password.trim() !== '') {
-        usuarioData.password = userToEdit.password
-      }
-
-      await axios.patch(`${API_URL}/usuarios/${userToEdit.id}`, usuarioData)
-      const id_usuario = userToEdit.id
-
-      if (roleId === 3) {
-        let id_docente = null
-        const docenteRes = await axios.get(`${API_URL}/docente?id_usuario=${id_usuario}`)
-        
-        if (docenteRes.data.length === 0) {
-          const newDocenteRes = await axios.post(`${API_URL}/docente`, { id_usuario })
-          id_docente = newDocenteRes.data.id
-        } else {
-          id_docente = docenteRes.data[0].id
-          const relRes = await axios.get(`${API_URL}/docente_grados?id_docente=${id_docente}`)
-          for (const rel of relRes.data) {
-            await axios.delete(`${API_URL}/docente_grados/${rel.id}`)
-          }
-        }
-        
-        for (const id_grado of gradosSeleccionados) {
-          await axios.post(`${API_URL}/docente_grados`, { id_docente, id_grado })
-        }
-      }
-
-      if (roleId === 2) {
-        const estRes = await axios.get(`${API_URL}/estudiantes?id_usuario=${id_usuario}`)
-        if (estRes.data.length === 0) {
-          await axios.post(`${API_URL}/estudiantes`, { id_usuario, id_grado: gradosSeleccionados[0] })
-        } else {
-          await axios.patch(`${API_URL}/estudiantes/${estRes.data[0].id}`, { id_grado: gradosSeleccionados[0] })
-        }
-      }
-
-      setEditModal(false)
-      setUserToEdit(null)
-      setGradosSeleccionados([])
-      await fetchUsuarios()
-      
-      setAlertData({ 
-        type: 'success', 
-        response: { message: 'Usuario actualizado exitosamente' } 
-      })
-
-    } catch (err) {
-      console.error('Error edit:', err)
-      setAlertData({ 
-        type: 'danger', 
-        response: err.response?.data || { message: 'Error al actualizar usuario' } 
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  /* ================= DELETE CON MODAL ================= */
-  const handleDeleteClick = (user) => {
-    setUserToDelete(user)
-    setDeleteModal(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!userToDelete) return
-
-    try {
-      if (userToDelete.id_role === 3) {
-        const docenteRes = await axios.get(`${API_URL}/docente?id_usuario=${userToDelete.id}`)
-        if (docenteRes.data.length > 0) {
-          const id_docente = docenteRes.data[0].id
-          const relRes = await axios.get(`${API_URL}/docente_grados?id_docente=${id_docente}`)
-          for (const rel of relRes.data) {
-            await axios.delete(`${API_URL}/docente_grados/${rel.id}`)
-          }
-          await axios.delete(`${API_URL}/docente/${id_docente}`)
-        }
-      }
-
-      if (userToDelete.id_role === 2) {
-        const estRes = await axios.get(`${API_URL}/estudiantes?id_usuario=${userToDelete.id}`)
-        if (estRes.data.length > 0) {
-          await axios.delete(`${API_URL}/estudiantes/${estRes.data[0].id}`)
-        }
-      }
-
-      await axios.delete(`${API_URL}/usuarios/${userToDelete.id}`)
-      
-      await fetchUsuarios()
-      setDeleteModal(false)
-      
-      setAlertData({ 
-        type: 'success', 
-        response: { message: 'Usuario eliminado correctamente' } 
-      })
-
-    } catch (err) {
-      console.error('Error delete:', err)
-      setAlertData({ 
-        type: 'danger', 
-        response: { message: 'Error al eliminar usuario' } 
-      })
+      if (userToEdit.password && userToEdit.password.trim() !== '') usuarioData.password = userToEdit.password
+      console.error('Error eliminando usuario:', err)
+      setAlertData({ type: 'danger', response: { message: err.message || 'Error al eliminar usuario' } })
       setDeleteModal(false)
     } finally {
       setUserToDelete(null)
+      setIsSubmitting(false)
     }
   }
 
@@ -443,15 +548,12 @@ const Users = () => {
     setDetailModal(true)
   }
 
+  /* ================= RENDER ================= */
+
   return (
     <div className="p-3">
-      {/* COMPONENTE DE ALERTA GLOBAL */}
       <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 1055 }}>
-        <AlertMessage 
-          response={alertData?.response} 
-          type={alertData?.type} 
-          onClose={() => setAlertData(null)} 
-        />
+        <AlertMessage response={alertData?.response} type={alertData?.type} onClose={() => setAlertData(null)} />
       </div>
 
       <div className="d-flex justify-content-end mb-3">
@@ -481,16 +583,14 @@ const Users = () => {
                   <CTableDataCell>{user.nombre} {user.apellido}</CTableDataCell>
                   <CTableDataCell>{user.email}</CTableDataCell>
                   <CTableDataCell>
-                    {roles.find((r) => r.id_role === user.id_role)?.nombre_rol || user.id_role}
+                    <CBadge color={user.id_role === 1 ? 'danger' : user.id_role === 3 ? 'success' : 'warning'}>
+                      {roles.find(r => r.id === user.id_role)?.nombre_rol || user.id_role}
+                    </CBadge>
                   </CTableDataCell>
                   <CTableDataCell>
                     {gradosPorUsuario[user.id]?.length > 0
-                      ? gradosPorUsuario[user.id].map((g, i) => (
-                          <CBadge key={i} color="info" className="me-1">
-                            {g}
-                          </CBadge>
-                        ))
-                      : <span className="text-muted small">Administrador</span>}
+                      ? gradosPorUsuario[user.id].map((g, i) => <CBadge key={i} color="info" className="me-1">{g}</CBadge>)
+                      : <span className="text-muted small">—</span>}
                   </CTableDataCell>
                   <CTableDataCell>
                     <CButton size="sm" color="info" className="me-1 text-white" onClick={() => handleViewDetails(user)}>
@@ -516,245 +616,116 @@ const Users = () => {
           <CModalTitle>Crear Nuevo Usuario</CModalTitle>
         </CModalHeader>
         <CModalBody>
-          <AlertMessage 
-            response={alertData?.response} 
-            type={alertData?.type} 
-            onClose={() => setAlertData(null)} 
-          />
-          
+          <AlertMessage response={alertData?.response} type={alertData?.type} onClose={() => setAlertData(null)} />
           <CForm>
-            <div className="mb-3">
-              <CFormLabel>Nombre *</CFormLabel>
-              <CFormInput
-                name="nombre"
-                value={newUser.nombre}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel>Apellido *</CFormLabel>
-              <CFormInput
-                name="apellido"
-                value={newUser.apellido}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel>Cédula</CFormLabel>
-              <CFormInput
-                name="cedula"
-                value={newUser.cedula}
-                onChange={handleChange}
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel>Email *</CFormLabel>
-              <CFormInput
-                type="email"
-                name="email"
-                value={newUser.email}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel>Contraseña *</CFormLabel>
-              <CFormInput
-                type="password"
-                name="password"
-                value={newUser.password}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel>Teléfono</CFormLabel>
-              <CFormInput
-                name="telefono"
-                value={newUser.telefono}
-                onChange={handleChange}
-              />
-            </div>
+            <div className="mb-3"><CFormLabel>Nombre *</CFormLabel><CFormInput name="nombre" value={newUser.nombre} onChange={handleChange} required invalid={!!formErrors.nombre} feedback={formErrors.nombre} /></div>
+            <div className="mb-3"><CFormLabel>Apellido *</CFormLabel><CFormInput name="apellido" value={newUser.apellido} onChange={handleChange} required invalid={!!formErrors.apellido} feedback={formErrors.apellido} /></div>
+            <div className="mb-3"><CFormLabel>Cédula</CFormLabel><CFormInput name="cedula" value={newUser.cedula} onChange={handleChange} invalid={!!formErrors.cedula} feedback={formErrors.cedula} /></div>
+            <div className="mb-3"><CFormLabel>Email *</CFormLabel><CFormInput type="email" name="email" value={newUser.email} onChange={handleChange} required invalid={!!formErrors.email} feedback={formErrors.email} /></div>
+            <div className="mb-3"><CFormLabel>Contraseña *</CFormLabel><CFormInput type="password" name="password" value={newUser.password} onChange={handleChange} required invalid={!!formErrors.password} feedback={formErrors.password} /></div>
+            <div className="mb-3"><CFormLabel>Teléfono</CFormLabel><CFormInput name="telefono" value={newUser.telefono} onChange={handleChange} invalid={!!formErrors.telefono} feedback={formErrors.telefono} /></div>
+
             <div className="mb-3">
               <CFormLabel>Rol *</CFormLabel>
-              <CFormSelect
-                name="id_role"
-                value={newUser.id_role}
-                onChange={handleChange}
-                required
-              >
+              <CFormSelect name="id_role" value={String(newUser.id_role)} onChange={handleChange} required invalid={!!formErrors.id_role} feedback={formErrors.id_role}>
                 <option value="">Seleccione un rol</option>
                 {roles.map((rol) => (
-                  <option key={rol.id} value={rol.id_role}>
+                  <option key={rol.id} value={String(rol.id)}>
                     {rol.nombre_rol}
                   </option>
                 ))}
               </CFormSelect>
             </div>
-            
-            {(newUser.id_role === '2' || newUser.id_role === '3') && (
+
+            {Number(newUser.id_role) === 2 && (
               <div className="mb-3">
-                <CFormLabel>
-                  {newUser.id_role === '2' ? 'Grado (Estudiante)' : 'Grados (Docente)'} *
-                </CFormLabel>
-                <CFormSelect
-                  multiple={newUser.id_role === '3'}
-                  value={gradosSeleccionados}
-                  onChange={handleGradoChange}
-                  required
-                  style={newUser.id_role === '3' ? { height: '120px' } : {}}
-                >
+                <CFormLabel>Grado (Estudiante) *</CFormLabel>
+                <CFormSelect value={gradosSeleccionados[0] || ''} onChange={handleGradoChange} required invalid={!!formErrors.grados} feedback={formErrors.grados}>
                   <option value="" disabled>Seleccione...</option>
                   {grados.map((grado) => (
-                    <option key={grado.id} value={grado.id_grado}>
+                    <option key={grado.id} value={grado.id}>
                       Grado {grado.nombre}
                     </option>
                   ))}
                 </CFormSelect>
-                {newUser.id_role === '3' && (
-                  <small className="text-muted d-block mt-1">
-                    Ctrl + Click para seleccionar múltiples
-                  </small>
-                )}
+              </div>
+            )}
+
+            {Number(newUser.id_role) === 3 && (
+              <div className="mb-3">
+                <CFormLabel>Grados (Docente) *</CFormLabel>
+                <CFormSelect multiple value={gradosSeleccionados} onChange={handleGradoChange} required style={{ height: '120px' }} invalid={!!formErrors.grados} feedback={formErrors.grados}>
+                  {grados.map((grado) => (
+                    <option key={grado.id} value={grado.id}>
+                      Grado {grado.nombre}
+                    </option>
+                  ))}
+                </CFormSelect>
+                <small className="text-muted d-block mt-1">Ctrl + Click para seleccionar múltiples</small>
               </div>
             )}
           </CForm>
         </CModalBody>
         <CModalFooter>
-          <CButton color="secondary" onClick={() => { setAddModal(false); resetForm(); }}>
-            Cancelar
-          </CButton>
-          <CButton color="primary" onClick={handleCreate} disabled={isSubmitting}>
-            {isSubmitting ? <CSpinner size="sm" /> : 'Crear Usuario'}
-          </CButton>
+          <CButton color="secondary" onClick={() => { setAddModal(false); resetForm(); }}>Cancelar</CButton>
+          <CButton color="primary" onClick={handleCreate} disabled={isSubmitting}>{isSubmitting ? <CSpinner size="sm" /> : 'Crear Usuario'}</CButton>
         </CModalFooter>
       </CModal>
 
       {/* MODAL EDITAR USUARIO */}
-      <CModal visible={editModal} onClose={() => { setEditModal(false); setUserToEdit(null); setGradosSeleccionados([]); setAlertData(null); }}>
-        <CModalHeader>
-          <CModalTitle>Editar Usuario</CModalTitle>
-        </CModalHeader>
+      <CModal visible={editModal} onClose={() => { setEditModal(false); setUserToEdit(null); setGradosSeleccionados([]); setAlertData(null); setFormErrors({}); }}>
+        <CModalHeader><CModalTitle>Editar Usuario</CModalTitle></CModalHeader>
         <CModalBody>
-          <AlertMessage 
-            response={alertData?.response} 
-            type={alertData?.type} 
-            onClose={() => setAlertData(null)} 
-          />
-
-          {userToEdit && (
+          <AlertMessage response={alertData?.response} type={alertData?.type} onClose={() => setAlertData(null)} />
+          {userToEdit ? (
             <CForm>
-              <div className="mb-3">
-                <CFormLabel>Nombre *</CFormLabel>
-                <CFormInput
-                  name="nombre"
-                  value={userToEdit.nombre || ''}
-                  onChange={handleEditChange}
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <CFormLabel>Apellido *</CFormLabel>
-                <CFormInput
-                  name="apellido"
-                  value={userToEdit.apellido || ''}
-                  onChange={handleEditChange}
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <CFormLabel>Cédula</CFormLabel>
-                <CFormInput
-                  name="cedula"
-                  value={userToEdit.cedula || ''}
-                  onChange={handleEditChange}
-                />
-              </div>
-              <div className="mb-3">
-                <CFormLabel>Email *</CFormLabel>
-                <CFormInput
-                  name="email"
-                  value={userToEdit.email || ''}
-                  onChange={handleEditChange}
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <CFormLabel>Contraseña (opcional)</CFormLabel>
-                <CFormInput
-                  type="password"
-                  name="password"
-                  value={userToEdit.password || ''}
-                  onChange={handleEditChange}
-                  placeholder="Dejar vacío para mantener actual"
-                />
-              </div>
-              <div className="mb-3">
-                <CFormLabel>Teléfono</CFormLabel>
-                <CFormInput
-                  name="telefono"
-                  value={userToEdit.telefono || ''}
-                  onChange={handleEditChange}
-                />
-              </div>
+              <div className="mb-3"><CFormLabel>Nombre *</CFormLabel><CFormInput name="nombre" value={userToEdit.nombre || ''} onChange={handleEditChange} required invalid={!!formErrors.nombre} feedback={formErrors.nombre} /></div>
+                <div className="mb-3"><CFormLabel>Apellido *</CFormLabel><CFormInput name="apellido" value={userToEdit.apellido || ''} onChange={handleEditChange} required invalid={!!formErrors.apellido} feedback={formErrors.apellido} /></div>
+                <div className="mb-3"><CFormLabel>Cédula</CFormLabel><CFormInput name="cedula" value={userToEdit.cedula || ''} onChange={handleEditChange} invalid={!!formErrors.cedula} feedback={formErrors.cedula} /></div>
+                <div className="mb-3"><CFormLabel>Email *</CFormLabel><CFormInput name="email" value={userToEdit.email || ''} onChange={handleEditChange} required invalid={!!formErrors.email} feedback={formErrors.email} /></div>
+                <div className="mb-3"><CFormLabel>Contraseña (opcional)</CFormLabel><CFormInput type="password" name="password" value={userToEdit.password || ''} onChange={handleEditChange} placeholder="Dejar vacío para mantener actual" invalid={!!formErrors.password} feedback={formErrors.password} /></div>
+                <div className="mb-3"><CFormLabel>Teléfono</CFormLabel><CFormInput name="telefono" value={userToEdit.telefono || ''} onChange={handleEditChange} invalid={!!formErrors.telefono} feedback={formErrors.telefono} /></div>
+
               <div className="mb-3">
                 <CFormLabel>Rol *</CFormLabel>
-                <CFormSelect
-                  name="id_role"
-                  value={userToEdit.id_role || ''}
-                  onChange={handleEditChange}
-                  required
-                >
+                <CFormSelect name="id_role" value={String(userToEdit.id_role || '')} onChange={handleEditChange} required invalid={!!formErrors.id_role} feedback={formErrors.id_role}>
                   <option value="">Seleccione un rol</option>
                   {roles.map((rol) => (
-                    <option key={rol.id} value={rol.id_role}>
-                      {rol.nombre_rol}
-                    </option>
+                    <option key={rol.id} value={String(rol.id)}>{rol.nombre_rol}</option>
                   ))}
                 </CFormSelect>
               </div>
-              
-              {(Number(userToEdit.id_role) === 2 || Number(userToEdit.id_role) === 3) && (
+
+              {Number(userToEdit.id_role) === 2 && (
                 <div className="mb-3">
-                  <CFormLabel>
-                    {Number(userToEdit.id_role) === 2 ? 'Grado (Estudiante)' : 'Grados (Docente)'} *
-                  </CFormLabel>
-                  <CFormSelect
-                    multiple={Number(userToEdit.id_role) === 3}
-                    value={gradosSeleccionados}
-                    onChange={handleGradoChange}
-                    required
-                    style={Number(userToEdit.id_role) === 3 ? { height: '120px' } : {}}
-                  >
+                  <CFormLabel>Grado (Estudiante) *</CFormLabel>
+                  <CFormSelect value={gradosSeleccionados[0] || ''} onChange={handleGradoChange} required invalid={!!formErrors.grados} feedback={formErrors.grados}>
                     <option value="" disabled>Seleccione...</option>
-                    {grados.map((grado) => (
-                      <option key={grado.id} value={grado.id_grado}>
-                        Grado {grado.nombre}
-                      </option>
-                    ))}
+                    {grados.map((grado) => <option key={grado.id} value={grado.id}>Grado {grado.nombre}</option>)}
+                  </CFormSelect>
+                </div>
+              )}
+
+              {Number(userToEdit.id_role) === 3 && (
+                <div className="mb-3">
+                  <CFormLabel>Grados (Docente) *</CFormLabel>
+                  <CFormSelect multiple value={gradosSeleccionados} onChange={handleGradoChange} required style={{ height: '120px' }} invalid={!!formErrors.grados} feedback={formErrors.grados}>
+                    {grados.map((grado) => <option key={grado.id} value={grado.id}>Grado {grado.nombre}</option>)}
                   </CFormSelect>
                 </div>
               )}
             </CForm>
-          )}
+          ) : <div>Cargando...</div>}
         </CModalBody>
         <CModalFooter>
-          <CButton color="secondary" onClick={() => { setEditModal(false); setUserToEdit(null); setGradosSeleccionados([]); }}>
-            Cancelar
-          </CButton>
-          <CButton color="primary" onClick={handleSaveEdit} disabled={isSubmitting}>
-            {isSubmitting ? <CSpinner size="sm" /> : 'Guardar Cambios'}
-          </CButton>
+          <CButton color="secondary" onClick={() => { setEditModal(false); setUserToEdit(null); setGradosSeleccionados([]); setFormErrors({}); }}>Cancelar</CButton>
+          <CButton color="primary" onClick={handleSaveEdit} disabled={isSubmitting}>{isSubmitting ? <CSpinner size="sm" /> : 'Guardar Cambios'}</CButton>
         </CModalFooter>
       </CModal>
 
       {/* MODAL DETALLE */}
       <CModal visible={detailModal} onClose={() => setDetailModal(false)}>
-        <CModalHeader>
-          <CModalTitle>Detalle del usuario</CModalTitle>
-        </CModalHeader>
+        <CModalHeader><CModalTitle>Detalle del usuario</CModalTitle></CModalHeader>
         <CModalBody>
           {userToView && (
             <>
@@ -763,109 +734,39 @@ const Users = () => {
               <p><strong>Cédula:</strong> {userToView.cedula || '—'}</p>
               <p><strong>Email:</strong> {userToView.email}</p>
               <p><strong>Teléfono:</strong> {userToView.telefono || '—'}</p>
-              <p><strong>Rol:</strong> {roles.find((r) => r.id_role === userToView.id_role)?.nombre_rol || userToView.id_role}</p>
+              <p><strong>Rol:</strong> {roles.find(r => r.id === userToView.id_role)?.nombre_rol || userToView.id_role}</p>
               <p><strong>Grados:</strong> {gradosPorUsuario[userToView.id]?.join(', ') || '—'}</p>
-              <p><strong>Fecha registro:</strong> {new Date(userToView.fecha_registro).toLocaleString()}</p>
+              <p><strong>Fecha registro:</strong> {userToView.fecha_registro ? new Date(userToView.fecha_registro).toLocaleString() : '—'}</p>
             </>
           )}
         </CModalBody>
         <CModalFooter>
-          <CButton color="secondary" onClick={() => setDetailModal(false)}>
-            Cerrar
-          </CButton>
+          <CButton color="secondary" onClick={() => setDetailModal(false)}>Cerrar</CButton>
         </CModalFooter>
       </CModal>
 
-      {/* 🔥 MODAL DE CONFIRMACIÓN PARA ELIMINAR (NUEVO Y MEJORADO) */}
-      <CModal 
-        visible={deleteModal} 
-        onClose={() => { setDeleteModal(false); setUserToDelete(null); }}
-        size="md"
-        alignment="center"
-      >
-        <CModalHeader className="bg-danger text-white border-0">
-          <CModalTitle className="d-flex align-items-center">
-            <CIcon icon={cilWarning} className="me-2" size="lg" />
-            Confirmar Eliminación
-          </CModalTitle>
-        </CModalHeader>
-        <CModalBody className="text-center py-4">
+      {/* MODAL ELIMINAR */}
+      <CModal visible={deleteModal} onClose={() => { setDeleteModal(false); setUserToDelete(null); }}>
+        <CModalHeader className="bg-danger text-white"><CModalTitle>Confirmar Eliminación</CModalTitle></CModalHeader>
+        <CModalBody className="text-center">
           {userToDelete && (
             <>
-              {/* Avatar o icono del usuario */}
-              <div className="mb-4">
-                <div className="d-flex justify-content-center">
-                  <div className="position-relative">
-                    <CAvatar 
-                      color="danger" 
-                      size="xl"
-                      className="border border-3 border-danger"
-                      style={{ backgroundColor: 'rgba(220, 53, 69, 0.1)' }}
-                    >
-                      <CIcon icon={cilUser} size="xl" />
-                    </CAvatar>
-                    <div className="position-absolute top-0 end-0 translate-middle">
-                      <div className="bg-danger rounded-circle p-1">
-                        <CIcon icon={cilWarning} className="text-white" size="sm" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="mb-4 d-flex justify-content-center">
+                <CAvatar color="danger" size="xl" className="border border-3 border-danger"><CIcon icon={cilUser} size="xl" /></CAvatar>
               </div>
-
-              {/* Mensaje principal */}
-              <h5 className="text-danger fw-bold mb-3">
-                ¿Está seguro de eliminar este usuario?
-              </h5>
-              
-              {/* Información del usuario */}
+              <h5 className="text-danger fw-bold mb-3">¿Está seguro de eliminar este usuario?</h5>
               <div className="alert alert-warning text-start mb-3">
-                <div className="d-flex">
-                  <CIcon icon={cilUser} className="me-2 mt-1" />
-                  <div>
-                    <strong>{userToDelete.nombre} {userToDelete.apellido}</strong>
-                    <div className="small">
-                      <div>Email: {userToDelete.email}</div>
-                      <div>Rol: {roles.find((r) => r.id_role === userToDelete.id_role)?.nombre_rol || userToDelete.id_role}</div>
-                      {gradosPorUsuario[userToDelete.id]?.length > 0 && (
-                        <div>Grados: {gradosPorUsuario[userToDelete.id].join(', ')}</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Advertencia */}
-              <div className="alert alert-light border text-start">
-                <div className="d-flex">
-                  <CIcon icon={cilWarning} className="me-2 text-warning" />
-                  <div>
-                    <strong className="text-warning">Advertencia:</strong>
-                    <p className="mb-0 small">
-                      Esta acción no se puede deshacer. Se eliminarán todos los datos asociados al usuario.
-                    </p>
-                  </div>
-                </div>
+                <strong>{userToDelete.nombre} {userToDelete.apellido}</strong>
+                <div className="small">Email: {userToDelete.email}</div>
+                <div className="small">Rol: {roles.find(r => r.id === userToDelete.id_role)?.nombre_rol || userToDelete.id_role}</div>
+                {gradosPorUsuario[userToDelete.id]?.length > 0 && <div className="small">Grados: {gradosPorUsuario[userToDelete.id].join(', ')}</div>}
               </div>
             </>
           )}
         </CModalBody>
-        <CModalFooter className="border-0 justify-content-center">
-          <CButton 
-            color="secondary" 
-            className="px-4"
-            onClick={() => { setDeleteModal(false); setUserToDelete(null); }}
-          >
-            Cancelar
-          </CButton>
-          <CButton 
-            color="danger" 
-            className="px-4"
-            onClick={handleDeleteConfirm}
-          >
-            <CIcon icon={cilTrash} className="me-2" />
-            Sí, Eliminar
-          </CButton>
+        <CModalFooter>
+          <CButton color="secondary" onClick={() => { setDeleteModal(false); setUserToDelete(null); }}>Cancelar</CButton>
+          <CButton color="danger" onClick={handleDeleteConfirm}>Sí, Eliminar</CButton>
         </CModalFooter>
       </CModal>
     </div>

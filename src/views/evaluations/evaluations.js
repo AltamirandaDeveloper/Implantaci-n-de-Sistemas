@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react"
+import { supabase } from '../../lib/supabase'
 import {
   CCard, CCardBody, CCardHeader, CCol, CRow, CButton, CModal, CModalHeader,
   CModalTitle, CModalBody, CModalFooter, CForm, CFormInput, CFormLabel,
@@ -9,6 +10,7 @@ import {
 import CIcon from "@coreui/icons-react"
 import { cilPlus, cilTrash, cilList, cilNotes, cilMediaPlay, cilCheckCircle, cilMicrophone, cilChartLine, cilLockLocked } from "@coreui/icons"
 import AlertMessage from "../../components/ui/AlertMessage"
+import { evaluationSchema } from '../../../schemas/evaluations.schema'
 
 const Evaluations = () => {
   // --- Estados Generales ---
@@ -44,6 +46,18 @@ const Evaluations = () => {
     titulo: "", descripcion: "", tipo_habilidad: "mixed", duracion_minutos: 20, fecha_disponible_hasta: "", activa: true, id_contenido: ""
   })
 
+  const [formErrors, setFormErrors] = useState({})
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    if (formErrors[name]) {
+      const copy = { ...formErrors }
+      delete copy[name]
+      setFormErrors(copy)
+    }
+  }
+
   const [preguntaForm, setPreguntaForm] = useState({
     enunciado: "", tipo_pregunta: "opcion_multiple", puntos: 5, opciones: ["", ""], respuesta_correcta: 0, respuesta_correcta_texto: ""
   })
@@ -61,9 +75,14 @@ const Evaluations = () => {
   const [examResult, setExamResult] = useState(null)
   const [examScoreDetails, setExamScoreDetails] = useState({ total: 0, obtained: 0, percentage: 0 })
 
-  // Simulación de Auth
+  // Simulación de Auth (normalizar fields `id` / `id_usuario`)
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("user")) || { id_usuario: 3, id_role: 3, nombre: "Profe" }
+    const raw = JSON.parse(localStorage.getItem("user")) || { id_usuario: 3, id_role: 3, nombre: "Profe" }
+    const storedUser = {
+      ...raw,
+      id_usuario: raw.id_usuario || raw.id,
+      id: raw.id || raw.id_usuario,
+    }
     setCurrentUser(storedUser)
     fetchData()
   }, [])
@@ -72,17 +91,30 @@ const Evaluations = () => {
     try {
       setLoading(true)
       const [evalRes, contRes, resRes, estRes, userRes] = await Promise.all([
-        fetch("http://localhost:3001/evaluaciones"),
-        fetch("http://localhost:3001/contenidos"),
-        fetch("http://localhost:3001/resultados_evaluaciones"),
-        fetch("http://localhost:3001/estudiantes"),
-        fetch("http://localhost:3001/usuarios"),
+        supabase.from('evaluaciones').select('*'),
+        supabase.from('contenidos').select('*'),
+        supabase.from('resultados_evaluaciones').select('*'),
+        supabase.from('estudiantes').select('*'),
+        supabase.from('usuarios').select('*'),
       ])
-      setEvaluaciones(await evalRes.json())
-      setContenidos(await contRes.json())
-      setResultados(await resRes.json())
-      setEstudiantes(await estRes.json())
-      setUsuarios(await userRes.json())
+
+      if (evalRes.error) throw evalRes.error
+      if (contRes.error) throw contRes.error
+      if (resRes.error) throw resRes.error
+      if (estRes.error) throw estRes.error
+      if (userRes.error) throw userRes.error
+
+      const evalData = (evalRes.data || []).map(r => ({ ...r, id_evaluacion: r.id }))
+      const contData = (contRes.data || []).map(r => ({ ...r, id_contenido: r.id }))
+      const resultadosData = resRes.data || []
+      const estudiantesData = estRes.data || []
+      const usuariosData = userRes.data || []
+
+      setEvaluaciones(evalData)
+      setContenidos(contData)
+      setResultados(resultadosData)
+      setEstudiantes(estudiantesData)
+      setUsuarios(usuariosData)
     } catch (error) { 
       console.error(error)
       setAlertMessage({ message: "Error al cargar los datos", issues: ["No se pudieron cargar los datos del servidor"] })
@@ -117,21 +149,18 @@ const Evaluations = () => {
       // Primero eliminar todos los resultados asociados a esta evaluación
       const resultadosAEliminar = resultados.filter(res => res.id_evaluacion === evaluationToDelete.id_evaluacion)
       
-      // Eliminar cada resultado
-      for (const resultado of resultadosAEliminar) {
-        await fetch(`http://localhost:3001/resultados_evaluaciones/${resultado.id}`, { 
-          method: "DELETE" 
-        })
-      }
-      
-      // Luego eliminar la evaluación
-      const response = await fetch(`http://localhost:3001/evaluaciones/${evaluationToDelete.id}`, { 
-        method: "DELETE" 
-      })
-      
-      if (!response.ok) {
-        throw new Error("Error al eliminar la evaluación")
-      }
+      // Eliminar resultados asociados y luego la evaluación en Supabase
+      const { error: delResErr } = await supabase
+        .from('resultados_evaluaciones')
+        .delete()
+        .eq('id_evaluacion', evaluationToDelete.id)
+      if (delResErr) throw delResErr
+
+      const { error: delEvalErr } = await supabase
+        .from('evaluaciones')
+        .delete()
+        .eq('id', evaluationToDelete.id)
+      if (delEvalErr) throw delEvalErr
       
       // Actualizar estados locales
       setEvaluaciones(evaluaciones.filter(e => e.id !== evaluationToDelete.id))
@@ -157,9 +186,9 @@ const Evaluations = () => {
     if (!preguntaToDelete) return
     
     try {
-      await fetch(`http://localhost:3001/preguntas/${preguntaToDelete.id || preguntaToDelete.id_pregunta}`, { 
-        method: "DELETE" 
-      })
+      const idToDelete = preguntaToDelete.id || preguntaToDelete.id_pregunta
+      const { error: delPregErr } = await supabase.from('preguntas').delete().eq('id', idToDelete)
+      if (delPregErr) throw delPregErr
       
       const filtered = preguntas.filter(p => 
         p.id !== preguntaToDelete.id && p.id_pregunta !== preguntaToDelete.id_pregunta
@@ -224,9 +253,11 @@ const Evaluations = () => {
       return
     }
 
-    const pregRes = await fetch(`http://localhost:3001/preguntas?id_evaluacion=${ev.id_evaluacion}`)
-    const optsRes = await fetch(`http://localhost:3001/opciones_pregunta`)
-    const pregs = await pregRes.json()
+    const { data: pregsRaw, error: pregErr } = await supabase.from('preguntas').select('*').eq('id_evaluacion', ev.id_evaluacion)
+    if (pregErr) throw pregErr
+    const { data: optsRaw, error: optsErr } = await supabase.from('opciones_pregunta').select('*')
+    if (optsErr) throw optsErr
+    const pregs = (pregsRaw || []).map(p => ({ ...p, id_pregunta: p.id }))
     const totalPuntos = pregs.reduce((acc, p) => acc + Number(p.puntos), 0)
     if (totalPuntos !== 20) {
       showError("Error de configuración", [`Esta evaluación tiene un error de configuración (Suma ${totalPuntos} puntos en vez de 20)`, "Contacte al docente"])
@@ -234,7 +265,7 @@ const Evaluations = () => {
     }
     setActiveExam(ev)
     setExamQuestions(pregs)
-    setExamOptions(await optsRes.json())
+    setExamOptions((optsRaw || []).map(o => ({ ...o, id_opcion: o.id })))
     setStudentAnswers({})
     setExamModalVisible(true)
   }
@@ -303,9 +334,11 @@ const Evaluations = () => {
     }
     
     try {
-      await fetch("http://localhost:3001/resultados_evaluaciones", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nuevoResultado)
-      })
+      const { error: insertResErr } = await supabase.from('resultados_evaluaciones').insert([{
+        ...nuevoResultado,
+        id_estudiante: currentUser.id || currentUser.id_usuario
+      }])
+      if (insertResErr) throw insertResErr
       
       setExamResult({
         nota: notaAcumulada,
@@ -334,10 +367,11 @@ const Evaluations = () => {
   const handleManageQuestions = async (ev) => {
     setCurrentEvaluation(ev)
     try {
-      const res = await fetch(`http://localhost:3001/preguntas?id_evaluacion=${ev.id_evaluacion}`)
-      const data = await res.json()
-      setPreguntas(data)
-      setPuntosTotales(data.reduce((acc, curr) => acc + Number(curr.puntos), 0))
+      const { data, error } = await supabase.from('preguntas').select('*').eq('id_evaluacion', ev.id_evaluacion)
+      if (error) throw error
+      const mapped = (data || []).map(d => ({ ...d, id_pregunta: d.id }))
+      setPreguntas(mapped)
+      setPuntosTotales(mapped.reduce((acc, curr) => acc + Number(curr.puntos), 0))
       setPreguntasVisible(true)
     } catch (error) {
       showError("Error al cargar las preguntas")
@@ -359,31 +393,25 @@ const Evaluations = () => {
         tipo_pregunta: preguntaForm.tipo_pregunta,
         puntos: puntosNuevos,
         respuesta_correcta_texto: preguntaForm.respuesta_correcta_texto,
-        id_pregunta: Date.now()
       }
-      
-      const resPreg = await fetch("http://localhost:3001/preguntas", {
-        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(nuevaPregunta)
-      })
-      
-      const pregGuardada = await resPreg.json()
-      
+
+      const { data: insData, error: insErr } = await supabase.from('preguntas').insert([nuevaPregunta]).select()
+      if (insErr) throw insErr
+      const r = insData[0]
+      const pregGuardada = { ...r, id_pregunta: r.id }
+
       if (preguntaForm.tipo_pregunta === "opcion_multiple") {
         await Promise.all(preguntaForm.opciones.map(async (txt, idx) => {
           if (txt) {
-            await fetch("http://localhost:3001/opciones_pregunta", {
-              method: "POST", headers: {"Content-Type": "application/json"},
-              body: JSON.stringify({
-                id_pregunta: pregGuardada.id_pregunta,
-                texto_opcion: txt,
-                es_correcta: idx === preguntaForm.respuesta_correcta,
-                id_opcion: Date.now() + idx
-              })
-            })
+            await supabase.from('opciones_pregunta').insert([{
+              id_pregunta: pregGuardada.id,
+              texto_opcion: txt,
+              es_correcta: idx === preguntaForm.respuesta_correcta
+            }])
           }
         }))
       }
-      
+
       const actualizadas = [...preguntas, pregGuardada]
       setPreguntas(actualizadas)
       setPuntosTotales(actualizadas.reduce((acc, curr) => acc + Number(curr.puntos), 0))
@@ -396,29 +424,30 @@ const Evaluations = () => {
 
   const handleSaveEvaluation = async (e) => {
     e.preventDefault()
-    
-    // Validación básica
-    if (!formData.titulo.trim()) {
-      showError("Faltan datos", ["El título es obligatorio"])
+    setFormErrors({})
+
+    // Validate title & description with Zod
+    const parsed = evaluationSchema.safeParse({ titulo: formData.titulo, descripcion: formData.descripcion })
+    if (!parsed.success) {
+      const errors = {}
+      parsed.error.issues.forEach((i) => {
+        const key = i.path && i.path.length ? i.path[0] : '_'
+        errors[key] = i.message
+      })
+      setFormErrors(errors)
       return
     }
-    
+
     if (!formData.fecha_disponible_hasta) {
       showError("Faltan datos", ["La fecha límite es obligatoria"])
       return
     }
 
     try {
-      const payload = { ...formData, id_docente: currentUser.id_usuario }
-      const response = await fetch("http://localhost:3001/evaluaciones", {
-        method: "POST", headers: {"Content-Type": "application/json"}, 
-        body: JSON.stringify({ ...payload, id_evaluacion: Date.now() })
-      })
-      
-      if (!response.ok) {
-        throw new Error("Error al guardar la evaluación")
-      }
-      
+      const payload = { ...formData, id_docente: currentUser.id || currentUser.id_usuario }
+      const { data: insEval, error: insEvalErr } = await supabase.from('evaluaciones').insert([payload]).select()
+      if (insEvalErr) throw insEvalErr
+      setFormErrors({})
       showSuccess(`Evaluación "${formData.titulo}" creada correctamente`)
       fetchData()
       setVisible(false)
@@ -564,15 +593,16 @@ const Evaluations = () => {
             <CModalBody>
               <div className="mb-3">
                 <CFormLabel>Título</CFormLabel>
-                <CFormInput required value={formData.titulo} onChange={e => setFormData({...formData, titulo: e.target.value})} placeholder="Ej: Examen Final" />
+                <CFormInput name="titulo" required value={formData.titulo} onChange={handleFormChange} placeholder="Ej: Examen Final" invalid={!!formErrors.titulo} feedback={formErrors.titulo} />
               </div>
               <div className="mb-3">
                 <CFormLabel>Descripción</CFormLabel>
-                <CFormTextarea 
-                  value={formData.descripcion} 
-                  onChange={e => setFormData({...formData, descripcion: e.target.value})} 
+                <CFormTextarea name="descripcion"
+                  value={formData.descripcion}
+                  onChange={handleFormChange}
                   rows={3}
                   placeholder="Instrucciones para el estudiante..."
+                  invalid={!!formErrors.descripcion} feedback={formErrors.descripcion}
                 />
               </div>
               <div className="mb-3">

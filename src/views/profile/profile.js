@@ -17,6 +17,7 @@ import {
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
 import { cilHttps, cilPencil } from '@coreui/icons'
+import { supabase } from '../../lib/supabase'
 
 const Profile = () => {
   const [userInfo, setUserInfo] = useState({})
@@ -64,53 +65,24 @@ const Profile = () => {
     }
   }, [])
 
-    // Helper: update user on server and return merged record (or throw)
+    // Helper: update user on Supabase and return the updated record (or throw)
     const updateUserOnServer = async (updated) => {
-      const apiBase = 'http://localhost:3001/usuarios'
-      // Prefer `id` (resource id) then try `id_usuario` query
-      const resourceId = updated.id || updated.id_usuario
-      try {
-        if (resourceId) {
-          // Try PATCH by id
-          const res = await fetch(`${apiBase}/${resourceId}`, {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated)
-          })
-          if (res.ok) return await res.json()
-        }
-      } catch (e) {
-        // ignore and try query by id_usuario below
-      }
+      const id = updated.id || updated.id_usuario
+      if (!id) throw new Error('No se proporcionó id de usuario')
 
-      // If we reach here, try to find by id_usuario query and PATCH that record
-      try {
-        if (updated.id_usuario) {
-          const q = await fetch(`${apiBase}?id_usuario=${updated.id_usuario}`)
-          const arr = await q.json()
-          if (Array.isArray(arr) && arr.length > 0) {
-            const record = arr[0]
-            const res2 = await fetch(`${apiBase}/${record.id}`, {
-              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated)
-            })
-            if (res2.ok) return await res2.json()
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
+      const allowed = ['nombre', 'apellido', 'email', 'telefono', 'password', 'id_role']
+      const payload = {}
+      allowed.forEach(k => { if (typeof updated[k] !== 'undefined') payload[k] = updated[k] })
 
-      // Last resort: try PUT to /usuarios/:id_usuario (some setups)
-      try {
-        if (updated.id_usuario) {
-          const res3 = await fetch(`${apiBase}/${updated.id_usuario}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated)
-          })
-          if (res3.ok) return await res3.json()
-        }
-      } catch (e) {
-        // ignore
-      }
+      const { data, error } = await supabase
+        .from('usuarios')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single()
 
-      throw new Error('No se pudo actualizar el usuario en el servidor')
+      if (error) throw error
+      return data
     }
 
   const openEditModal = () => {

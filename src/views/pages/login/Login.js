@@ -1,4 +1,3 @@
-// src/views/pages/login/Login.js - AJUSTAR EL TÍTULO
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -10,11 +9,10 @@ import {
   CSpinner,
   CAlert
 } from '@coreui/react'
-import axios from 'axios'
+// Importamos el cliente de supabase en lugar de axios
+import { supabase } from '../../../lib/supabase' 
 import AnimatedMonster from '../../../components/AnimatedMonster'
 import './Login.css'
-
-const API_URL = 'http://localhost:3001'
 
 const Login = () => {
   const navigate = useNavigate()
@@ -42,79 +40,70 @@ const Login = () => {
     }
   }
 
-  const handlePasswordFocus = () => {
-    setIsPasswordFocused(true)
-  }
-
-  const handlePasswordBlur = () => {
-    setIsPasswordFocused(false)
-  }
+  const handlePasswordFocus = () => setIsPasswordFocused(true)
+  const handlePasswordBlur = () => setIsPasswordFocused(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     
     if (!formData.email.trim() || !formData.password.trim()) {
-      setStatus({
-        ...status,
-        error: 'Por favor, completa todos los campos'
-      })
+      setStatus({ ...status, error: 'Por favor, completa todos los campos' })
       return
     }
 
-    setStatus({
-      loading: true,
-      error: '',
-      success: ''
-    })
+    setStatus({ loading: true, error: '', success: '' })
 
     try {
-      const response = await axios.get(`${API_URL}/usuarios`, {
-        params: {
-          email: formData.email.trim()
-        }
-      })
+      // 1. CONSULTA A SUPABASE
+      // Buscamos el usuario por email y traemos los datos necesarios
+      const { data: users, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('email', formData.email.trim())
+        .limit(1)
 
-      if (!response.data || response.data.length === 0) {
+      if (error) throw error
+
+      if (!users || users.length === 0) {
         throw new Error('Credenciales inválidas')
       }
 
-      const user = response.data[0]
+      const user = users[0]
 
+      // 2. VALIDACIÓN DE CONTRASEÑA
       if (user.password !== formData.password) {
         throw new Error('Credenciales inválidas')
       }
 
+      // 3. MAPEO DE ROLES
       const roleMap = {
         1: 'admin',
         2: 'student',
         3: 'teacher',
       }
 
-      // Normalize user object to a stable shape expected across the app
+      // Estructura de datos para mantener compatibilidad con el resto de tu app
       const userData = {
-        id_usuario: user.id_usuario ?? user.id ?? (user.id_user && String(user.id_user)),
-        id: user.id ?? user.id_usuario ?? undefined,
-        nombre: user.nombre ?? user.name ?? (user.email ? user.email.split('@')[0] : ''),
-        apellido: user.apellido ?? user.lastName ?? user.surname ?? '',
-        email: user.email ?? user.emailAddress ?? '',
-        telefono: user.telefono ?? user.phone ?? '',
-        id_role: user.id_role ?? (typeof user.role === 'string' ? (user.role === 'admin' ? 1 : user.role === 'teacher' ? 3 : 2) : user.role),
-        password: user.password ?? '',
-        role: roleMap[user.id_role] || (user.role ?? 'student')
+        id_usuario: user.id || user.id_usuario,
+        id: user.id || user.id_usuario,
+        nombre: user.nombre || '',
+        apellido: user.apellido || '',
+        email: user.email || '',
+        telefono: user.telefono || '',
+        id_role: user.id_role,
+        role: roleMap[user.id_role] || 'student'
       }
 
-      // Session/auth data
+      // 4. GESTIÓN DE SESIÓN (LocalStorage)
       const SESSION_DURATION = 1000 * 60 * 60 * 8 // 8 horas
       const authData = {
-        token: `auth-${userData.id || userData.id_usuario || 'anon'}-${Date.now()}`,
+        token: `supabase-auth-${userData.id}-${Date.now()}`,
         expiresAt: Date.now() + SESSION_DURATION,
       }
 
-      try { localStorage.setItem('auth', JSON.stringify(authData)) } catch (e) { /* ignore storage errors */ }
-      try { localStorage.setItem('user', JSON.stringify(userData)) } catch (e) { /* ignore storage errors */ }
-      // also store a simple token key for compatibility with other code that expects `token`
-      try { localStorage.setItem('token', authData.token) } catch (e) { }
-
+      localStorage.setItem('auth', JSON.stringify(authData))
+      localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.setItem('token', authData.token)
 
       setStatus({
         loading: false,
@@ -122,29 +111,17 @@ const Login = () => {
         success: '¡Inicio de sesión exitoso! Redirigiendo...'
       })
 
+      // Redirección después del éxito
       setTimeout(() => {
         navigate('/', { replace: true })
       }, 1500)
 
     } catch (error) {
-      let errorMessage = 'Error al iniciar sesión'
-      
-      if (error.response) {
-        errorMessage = error.response.status === 404 
-          ? 'Servicio no disponible' 
-          : `Error del servidor (${error.response.status})`
-      } else if (error.request) {
-        errorMessage = 'No se pudo conectar con el servidor'
-      } else if (error.message) {
-        errorMessage = error.message
-      }
-
       setStatus({
         loading: false,
-        error: errorMessage,
+        error: error.message || 'Error al conectar con el servidor',
         success: ''
       })
-      
       setFormData(prev => ({ ...prev, password: '' }))
     }
   }
@@ -152,19 +129,16 @@ const Login = () => {
   return (
     <div className="login-page">
       <div className="login-container">
-        {/* Monstruo animado - SE SUPERPONE AL FORMULARIO */}
         <AnimatedMonster 
           usernameLength={usernameLength}
           isPasswordFocused={isPasswordFocused}
         />
 
-        {/* Formulario de login - CON MÁRGEN PARA EL MONSTRUO */}
-        <CCard className="login-form">
-          <CCardBody>
-            {/* Título más pequeño ya que el monstruo es el foco */}
-            <h2 className="text-center mb-4">
+        <CCard className="login-form shadow-lg">
+          <CCardBody className="p-4">
+            <h2 className="text-center mb-4" style={{ fontFamily: "'Bowlby One SC', cursive", color: '#4a4a4a' }}>
               Plataforma de Inglés
-              Colegio San Juan Bautista
+              <small className="d-block text-muted mt-2" style={{ fontSize: '0.6em' }}>Colegio San Juan Bautista</small>
             </h2>
 
             {status.error && (
@@ -181,28 +155,25 @@ const Login = () => {
             )}
 
             <CForm onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label htmlFor="email">Email</label>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="email">Email</label>
                 <CFormInput
                   type="email"
                   name="email"
-                  id="input-usuario"
                   placeholder="ejemplo@gmail.com"
                   autoComplete="username"
                   value={formData.email}
                   onChange={handleChange}
                   required
                   disabled={status.loading}
-                  className={status.error ? 'is-invalid' : ''}
                 />
               </div>
 
-              <div className="form-group">
-                <label htmlFor="password">Contraseña</label>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="password">Contraseña</label>
                 <CFormInput
                   type="password"
                   name="password"
-                  id="input-clave"
                   placeholder="********"
                   autoComplete="current-password"
                   value={formData.password}
@@ -211,7 +182,6 @@ const Login = () => {
                   onBlur={handlePasswordBlur}
                   required
                   disabled={status.loading}
-                  className={status.error ? 'is-invalid' : ''}
                 />
               </div>
 
@@ -223,15 +193,11 @@ const Login = () => {
                   style={{
                     backgroundColor: '#824283',
                     borderColor: '#824283',
-                    fontFamily: "'Bowlby One SC', cursive"
+                    fontFamily: "'Bowlby One SC', cursive",
+                    padding: '12px'
                   }}
                 >
-                  {status.loading ? (
-                    <div className="spinner-container">
-                      <CSpinner size="sm" className="me-2" />
-                      Procesando...
-                    </div>
-                  ) : 'ACCEDER'}
+                  {status.loading ? <CSpinner size="sm" /> : 'ACCEDER'}
                 </CButton>
               </div>
             </CForm>
