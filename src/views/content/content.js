@@ -41,7 +41,7 @@ const Content = () => {
   const [formErrors, setFormErrors] = useState({})
 
   // Obtener usuario del localStorage (ya configurado en el login de Supabase)
-  const user = JSON.parse(localStorage.getItem("user") || "{}")
+  const user = JSON.parse(sessionStorage.getItem("user") || "{}")
   const isDocente = user.id_role === 1 || user.id_role === 3 // Admin o Docente
 
   useEffect(() => {

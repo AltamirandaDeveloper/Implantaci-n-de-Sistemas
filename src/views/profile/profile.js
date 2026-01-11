@@ -16,74 +16,81 @@ import {
   CCol,
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
-import { cilHttps, cilPencil } from '@coreui/icons'
+import { cilHttps, cilPencil, cilSchool } from '@coreui/icons'
 import { supabase } from '../../lib/supabase'
 
 const Profile = () => {
   const [userInfo, setUserInfo] = useState({})
-  const [editInfo, setEditInfo] = useState({})
+  const [gradoNombre, setGradoNombre] = useState('')
+  const [editInfo, setEditInfo] = useState({
+    nombre: '',
+    apellido: '',
+    email: '',
+    telefono: '',
+  })
   const [showEditModal, setShowEditModal] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [password, setPassword] = useState({ current: '', new: '', confirm: '' })
   const [formErrors, setFormErrors] = useState({})
   const [successMessage, setSuccessMessage] = useState('')
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user')
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser)
-        // Normalize fields coming from different backends/localstorage shapes
-        const nombreRaw = parsed.nombre || parsed.name || parsed.fullName || parsed.nombre_completo || ''
-        const apellidoRaw = parsed.apellido || parsed.lastName || parsed.surname || ''
-        let nombre = nombreRaw
-        let apellido = apellidoRaw
-        // If only a full name was provided, try to split into nombre/apellido
-        if (!apellido && nombreRaw && nombreRaw.trim().includes(' ')) {
-          const parts = nombreRaw.trim().split(' ')
-          nombre = parts.shift()
-          apellido = parts.join(' ')
-        }
-        const roleField = parsed.id_role || parsed.idRole || parsed.role || parsed.role_id
-        const idRole = typeof roleField === 'string'
-          ? (roleField === 'student' ? 2 : roleField === 'docente' || roleField === 'teacher' ? 3 : roleField === 'admin' ? 1 : Number(roleField) || roleField)
-          : roleField
+  // Estilo morado personalizado
+  const purpleStyle = { backgroundColor: '#824283', borderColor: '#824283', color: 'white' }
 
-        const normalized = {
-          id_usuario: parsed.id_usuario || parsed.id || parsed.userId || parsed.user_id,
-          nombre: nombre || '',
-          apellido: apellido || '',
-          email: parsed.email || parsed.emailAddress || parsed.mail || '',
-          telefono: parsed.telefono || parsed.phone || parsed.telefono_movil || '',
-          id_role: idRole,
-          password: parsed.password || parsed.pass || ''
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const storedUser = sessionStorage.getItem('user')
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser)
+          const userId = parsed.id_usuario || parsed.id
+          
+          setUserInfo({
+            ...parsed,
+            id_usuario: userId
+          })
+
+          // Lógica corregida según tu estructura de tablas
+          if (Number(parsed.id_role) === 2) {
+            // 1. Buscar en la tabla estudiantes el id_grado
+            const { data: estData, error: estError } = await supabase
+              .from('estudiantes')
+              .select('id_grado')
+              .eq('id_usuario', userId)
+              .single()
+
+            if (estData && estData.id_grado) {
+              // 2. Buscar el nombre en la tabla grados
+              const { data: gradoData } = await supabase
+                .from('grados')
+                .select('nombre')
+                .eq('id', estData.id_grado)
+                .single()
+              
+              if (gradoData) setGradoNombre(`Grado ${gradoData.nombre}`)
+            }
+          }
+        } catch (e) {
+          console.error('Error al cargar datos de perfil:', e)
         }
-        setUserInfo(normalized)
-      } catch (e) {
-        console.error('Error parsing stored user', e)
       }
     }
+
+    fetchUserData()
   }, [])
 
-    // Helper: update user on Supabase and return the updated record (or throw)
-    const updateUserOnServer = async (updated) => {
-      const id = updated.id || updated.id_usuario
-      if (!id) throw new Error('No se proporcionó id de usuario')
+  const updateUserOnServer = async (payload) => {
+    const id = userInfo.id_usuario || userInfo.id
+    const { data, error } = await supabase
+      .from('usuarios')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single()
 
-      const allowed = ['nombre', 'apellido', 'email', 'telefono', 'password', 'id_role']
-      const payload = {}
-      allowed.forEach(k => { if (typeof updated[k] !== 'undefined') payload[k] = updated[k] })
-
-      const { data, error } = await supabase
-        .from('usuarios')
-        .update(payload)
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) throw error
-      return data
-    }
+    if (error) throw error
+    return data
+  }
 
   const openEditModal = () => {
     setEditInfo({
@@ -96,102 +103,112 @@ const Profile = () => {
     setShowEditModal(true)
   }
 
-  const handleEditInfo = () => {
+  const handleEditInfo = async () => {
     const errors = {}
-    if (!editInfo.nombre) errors.nombre = 'Nombre requerido'
-    if (!editInfo.apellido) errors.apellido = 'Apellido requerido'
-    if (!editInfo.email) errors.email = 'Email requerido'
+    if (!editInfo.nombre) errors.nombre = 'Requerido'
+    if (!editInfo.apellido) errors.apellido = 'Requerido'
     setFormErrors(errors)
     if (Object.keys(errors).length > 0) return
-    ;(async () => {
-      const updatedUser = { ...userInfo, ...editInfo }
-      try {
-        const serverUser = await updateUserOnServer(updatedUser)
-        const merged = { ...updatedUser, ...serverUser }
-        try { localStorage.setItem('user', JSON.stringify(merged)) } catch (e) { /* ignore */ }
-        setUserInfo(merged)
-        setShowEditModal(false)
-        setSuccessMessage('Información actualizada correctamente')
-      } catch (e) {
-        console.error(e)
-        setFormErrors({ form: 'No se pudo actualizar en el servidor. Intenta de nuevo.' })
-      }
-    })()
+
+    try {
+      const serverUser = await updateUserOnServer({
+        nombre: editInfo.nombre,
+        apellido: editInfo.apellido,
+        email: editInfo.email,
+        telefono: editInfo.telefono,
+      })
+      const mergedUser = { ...userInfo, ...serverUser }
+      sessionStorage.setItem('user', JSON.stringify(mergedUser))
+      setUserInfo(mergedUser)
+      setShowEditModal(false)
+      setSuccessMessage('Perfil actualizado')
+      setTimeout(() => setSuccessMessage(''), 3000)
+    } catch (e) {
+      setFormErrors({ form: 'Error al actualizar.' })
+    }
   }
 
-  const handleChangePassword = () => {
-    const errors = {}
-    if (!password.current) errors.current = 'Ingrese la contraseña actual'
-    if (!password.new) errors.new = 'Ingrese la nueva contraseña'
-    if (password.new !== password.confirm) errors.confirm = 'La nueva contraseña no coincide'
-    setFormErrors(errors)
-    if (Object.keys(errors).length > 0) return
-
+  const handleChangePassword = async () => {
     if (password.current !== userInfo.password) {
       setFormErrors({ current: 'Contraseña actual incorrecta' })
       return
     }
-    ;(async () => {
-      const updatedUser = { ...userInfo, password: password.new }
-      try {
-        const serverUser = await updateUserOnServer(updatedUser)
-        const merged = { ...updatedUser, ...serverUser }
-        try { localStorage.setItem('user', JSON.stringify(merged)) } catch (e) { }
-        setUserInfo(merged)
-        setPassword({ current: '', new: '', confirm: '' })
-        setShowPasswordModal(false)
-        setSuccessMessage('Contraseña actualizada correctamente')
-      } catch (e) {
-        console.error(e)
-        setFormErrors({ form: 'No se pudo actualizar la contraseña en el servidor' })
-      }
-    })()
+    if (password.new !== password.confirm) {
+      setFormErrors({ confirm: 'No coinciden' })
+      return
+    }
+
+    try {
+      await updateUserOnServer({ password: password.new })
+      const mergedUser = { ...userInfo, password: password.new }
+      sessionStorage.setItem('user', JSON.stringify(mergedUser))
+      setUserInfo(mergedUser)
+      setShowPasswordModal(false)
+      setPassword({ current: '', new: '', confirm: '' })
+      setSuccessMessage('Contraseña cambiada')
+      setTimeout(() => setSuccessMessage(''), 3000)
+    } catch (e) {
+      setFormErrors({ form: 'Error de servidor' })
+    }
   }
 
   return (
-    <div className="d-flex justify-content-center align-items-center flex-column">
+    <div className="d-flex justify-content-center align-items-center flex-column p-4">
       {successMessage && (
-        <div
-          className="alert alert-success text-center w-100"
-          role="alert"
-          style={{ maxWidth: 600 }}
-        >
+        <div className="alert alert-success text-center w-100 mb-4" style={{ maxWidth: 600 }}>
           {successMessage}
         </div>
       )}
 
       <CContainer>
-        <CRow className="justify-content-center component-space">
-          <CCol xs={12} md={6}>
-            <CCard>
-              <CCardHeader>
-                <h5 className="text-center w-100">Información Personal</h5>
+        <CRow className="justify-content-center">
+          <CCol xs={12} md={8} lg={6}>
+            <CCard className="shadow-lg border-0">
+              <CCardHeader className="py-3" style={purpleStyle}>
+                <h5 className="mb-0 text-center" style={{ letterSpacing: '1px', fontWeight: 'bold' }}>
+                  MI PERFIL
+                </h5>
               </CCardHeader>
-              <CCardBody>
-                <div className="text-center mb-4">
-                  <div className="mb-2">
-                    <strong>Nombre:</strong> {userInfo.nombre}
+              <CCardBody className="p-4">
+                <div className="mb-4">
+                  <div className="row mb-3 border-bottom pb-2">
+                    <div className="col-4 text-muted small fw-bold text-uppercase">Nombre:</div>
+                    <div className="col-8 fw-bold">{userInfo.nombre}</div>
                   </div>
-                  <div className="mb-2">
-                    <strong>Apellido:</strong> {userInfo.apellido}
+                  <div className="row mb-3 border-bottom pb-2">
+                    <div className="col-4 text-muted small fw-bold text-uppercase">Apellido:</div>
+                    <div className="col-8 fw-bold">{userInfo.apellido}</div>
                   </div>
-                  <div className="mb-2">
-                    <strong>Teléfono:</strong> {userInfo.telefono || 'No disponible'}
+                  <div className="row mb-3 border-bottom pb-2">
+                    <div className="col-4 text-muted small fw-bold text-uppercase">Email:</div>
+                    <div className="col-8">{userInfo.email}</div>
                   </div>
-                  <div className="mb-2">
-                    <strong>Email:</strong> {userInfo.email}
+                  <div className="row mb-3">
+                    <div className="col-4 text-muted small fw-bold text-uppercase">Rol:</div>
+                    <div className="col-8">
+                      <span className="badge p-2" style={purpleStyle}>
+                        {userInfo.id_role === 1 ? 'Administrador' : userInfo.id_role === 2 ? 'Estudiante' : 'Docente'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="mb-2">
-                    <strong>Rol:</strong> {userInfo.id_role === 1 ? 'Admin' : userInfo.id_role === 2 ? 'Estudiante' : 'Docente'}
-                  </div>
+                  {/* Campo de Grado dinámico según tu lógica de estudiantes */}
+                  {Number(userInfo.id_role) === 2 && gradoNombre && (
+                    <div className="row mb-3 border-bottom pb-2">
+                      <div className="col-4 text-muted small fw-bold text-uppercase">Grado:</div>
+                      <div className="col-8 text-primary fw-bold">
+                        <CIcon icon={cilSchool} className="me-2" />
+                        {gradoNombre}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="d-flex justify-content-center gap-3">
-                  <CButton color="primary" onClick={openEditModal}>
-                    <CIcon icon={cilPencil} /> Editar Información
+
+                <div className="d-grid gap-2 d-md-flex justify-content-md-center">
+                  <CButton style={purpleStyle} onClick={openEditModal} className="px-4">
+                    <CIcon icon={cilPencil} className="me-2" /> Editar Datos
                   </CButton>
-                  <CButton color="info" className="text-white" onClick={() => setShowPasswordModal(true)}>
-                    <CIcon icon={cilHttps} className="me-2" />
-                    Cambiar Contraseña
+                  <CButton color="dark" onClick={() => setShowPasswordModal(true)} className="px-4 text-white">
+                    <CIcon icon={cilHttps} className="me-2" /> Seguridad
                   </CButton>
                 </div>
               </CCardBody>
@@ -200,96 +217,40 @@ const Profile = () => {
         </CRow>
       </CContainer>
 
-      {/* Modal Editar Información */}
+      {/* Modal Editar */}
       <CModal visible={showEditModal} onClose={() => setShowEditModal(false)}>
-        <CModalHeader>Editar Información Personal</CModalHeader>
-        <CModalBody>
-          <CForm>
-            <CFormInput
-              label="Nombre"
-              value={editInfo.nombre || ''}
-              onChange={(e) => setEditInfo({ ...editInfo, nombre: e.target.value })}
-              className="mb-2"
-              invalid={!!formErrors.nombre}
-              feedback={formErrors.nombre}
-            />
-            <CFormInput
-              label="Apellido"
-              value={editInfo.apellido || ''}
-              onChange={(e) => setEditInfo({ ...editInfo, apellido: e.target.value })}
-              className="mb-2"
-              invalid={!!formErrors.apellido}
-              feedback={formErrors.apellido}
-            />
-            <CFormInput
-              label="Teléfono"
-              value={editInfo.telefono || ''}
-              onChange={(e) => setEditInfo({ ...editInfo, telefono: e.target.value })}
-              className="mb-2"
-            />
-            <CFormInput
-              label="Email"
-              value={editInfo.email || ''}
-              onChange={(e) => setEditInfo({ ...editInfo, email: e.target.value })}
-              className="mb-2"
-              invalid={!!formErrors.email}
-              feedback={formErrors.email}
-            />
-          </CForm>
-        </CModalBody>
-        <CModalFooter>
-          <CButton color="primary" onClick={handleEditInfo}>
-            Guardar
-          </CButton>
-          <CButton color="secondary" onClick={() => setShowEditModal(false)}>
-            Cancelar
-          </CButton>
-        </CModalFooter>
-      </CModal>
-
-      {/* Modal Cambiar Contraseña */}
-      <CModal visible={showPasswordModal} onClose={() => setShowPasswordModal(false)}>
-        <CModalHeader>
-          <CModalTitle>Cambiar Contraseña</CModalTitle>
+        <CModalHeader style={purpleStyle} className="text-white">
+          <CModalTitle>Editar Datos</CModalTitle>
         </CModalHeader>
         <CModalBody>
           <CForm>
-            <CFormInput
-              type="password"
-              label="Contraseña Actual"
-              value={password.current}
-              onChange={(e) => setPassword({ ...password, current: e.target.value })}
-              className="mb-3"
-              invalid={!!formErrors.current}
-              feedback={formErrors.current}
-            />
-            <CFormInput
-              type="password"
-              label="Nueva Contraseña"
-              value={password.new}
-              onChange={(e) => setPassword({ ...password, new: e.target.value })}
-              className="mb-3"
-              invalid={!!formErrors.new}
-              feedback={formErrors.new}
-            />
-            <CFormInput
-              type="password"
-              label="Confirmar Nueva Contraseña"
-              value={password.confirm}
-              onChange={(e) => setPassword({ ...password, confirm: e.target.value })}
-              className="mb-3"
-              invalid={!!formErrors.confirm}
-              feedback={formErrors.confirm}
-            />
+            <CFormInput label="Nombre" value={editInfo.nombre} onChange={(e) => setEditInfo({...editInfo, nombre: e.target.value})} className="mb-3" />
+            <CFormInput label="Apellido" value={editInfo.apellido} onChange={(e) => setEditInfo({...editInfo, apellido: e.target.value})} className="mb-3" />
+            <CFormInput label="Teléfono" value={editInfo.telefono} onChange={(e) => setEditInfo({...editInfo, telefono: e.target.value})} className="mb-3" />
+            <CFormInput label="Email" value={editInfo.email} onChange={(e) => setEditInfo({...editInfo, email: e.target.value})} className="mb-3" />
           </CForm>
         </CModalBody>
         <CModalFooter>
-          <CButton color="primary" onClick={handleChangePassword}>
-            Guardar
-          </CButton>
-          <CButton color="secondary" onClick={() => setShowPasswordModal(false)}>
-            Cancelar
-          </CButton>
+          <CButton color="secondary" onClick={() => setShowEditModal(false)}>Cerrar</CButton>
+          <CButton style={purpleStyle} onClick={handleEditInfo}>Guardar</CButton>
+        </CModalFooter>
+      </CModal>
+
+      {/* Modal Password */}
+      <CModal visible={showPasswordModal} onClose={() => setShowPasswordModal(false)}>
+        <CModalHeader style={purpleStyle} className="text-white">
+          <CModalTitle>Seguridad</CModalTitle>
+        </CModalHeader>
+        <CModalBody>
+          <CForm>
+            <CFormInput type="password" label="Contraseña Actual" onChange={(e) => setPassword({...password, current: e.target.value})} className="mb-3" invalid={!!formErrors.current} feedback={formErrors.current} />
+            <CFormInput type="password" label="Nueva Contraseña" onChange={(e) => setPassword({...password, new: e.target.value})} className="mb-3" />
+            <CFormInput type="password" label="Confirmar Nueva" onChange={(e) => setPassword({...password, confirm: e.target.value})} className="mb-3" invalid={!!formErrors.confirm} feedback={formErrors.confirm} />
+          </CForm>
+        </CModalBody>
+        <CModalFooter>
+          <CButton color="secondary" onClick={() => setShowPasswordModal(false)}>Cerrar</CButton>
+          <CButton style={purpleStyle} onClick={handleChangePassword}>Actualizar</CButton>
         </CModalFooter>
       </CModal>
     </div>

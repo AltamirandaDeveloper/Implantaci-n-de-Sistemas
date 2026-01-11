@@ -101,9 +101,11 @@ const Login = () => {
         expiresAt: Date.now() + SESSION_DURATION,
       }
 
-      localStorage.setItem('auth', JSON.stringify(authData))
-      localStorage.setItem('user', JSON.stringify(userData))
-      localStorage.setItem('token', authData.token)
+      // CAMBIO AQUÍ: Usamos sessionStorage
+      sessionStorage.setItem('auth', JSON.stringify(authData))
+      sessionStorage.setItem('user', JSON.stringify(userData))
+      sessionStorage.setItem('token', authData.token)
+      localStorage.clear()
 
       setStatus({
         loading: false,

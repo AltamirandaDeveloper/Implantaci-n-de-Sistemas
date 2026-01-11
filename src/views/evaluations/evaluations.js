@@ -5,10 +5,10 @@ import {
   CModalTitle, CModalBody, CModalFooter, CForm, CFormInput, CFormLabel,
   CFormSelect, CFormTextarea, CTable, CTableHead, CTableRow, CTableHeaderCell,
   CTableBody, CTableDataCell, CBadge, CSpinner, CNav, CNavItem, CNavLink,
-  CTabContent, CTabPane, CFormCheck, CAlert, CProgress
+  CTabContent, CTabPane, CFormCheck, CAlert, CProgress,
 } from "@coreui/react"
 import CIcon from "@coreui/icons-react"
-import { cilPlus, cilTrash, cilList, cilNotes, cilMediaPlay, cilCheckCircle, cilMicrophone, cilChartLine, cilLockLocked } from "@coreui/icons"
+import { cilPlus, cilTrash, cilList, cilNotes, cilMediaPlay, cilCheckCircle, cilMicrophone, cilChartLine, cilLockLocked, cilVolumeHigh } from "@coreui/icons"
 import AlertMessage from "../../components/ui/AlertMessage"
 import { evaluationSchema } from '../../../schemas/evaluations.schema'
 
@@ -77,7 +77,7 @@ const Evaluations = () => {
 
   // Simulación de Auth (normalizar fields `id` / `id_usuario`)
   useEffect(() => {
-    const raw = JSON.parse(localStorage.getItem("user")) || { id_usuario: 3, id_role: 3, nombre: "Profe" }
+    const raw = JSON.parse(sessionStorage.getItem("user")) || { id_usuario: 3, id_role: 3, nombre: "Profe" }
     const storedUser = {
       ...raw,
       id_usuario: raw.id_usuario || raw.id,
@@ -226,6 +226,29 @@ const Evaluations = () => {
     recognition.onerror = () => setIsListening(false)
     recognition.onend = () => setIsListening(false)
     recognition.start()
+  }
+
+  // ==========================================
+  // FUNCIÓN TEXT-TO-SPEECH (NUEVO)
+  // ==========================================
+  const speakText = (text) => {
+    if (!text) return
+    
+    // Cancelar cualquier audio previo para evitar superposiciones
+    window.speechSynthesis.cancel()
+
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'en-US' // Configurado para inglés americano
+    utterance.rate = 0.8     // Un poco más lento para mejor comprensión
+    
+    // Intentar buscar una voz nativa en inglés si está disponible
+    const voices = window.speechSynthesis.getVoices()
+    const englishVoice = voices.find(v => v.lang === 'en-US' || v.lang === 'en-GB')
+    if (englishVoice) {
+      utterance.voice = englishVoice
+    }
+
+    window.speechSynthesis.speak(utterance)
   }
 
   // ==========================================
@@ -829,6 +852,20 @@ const Evaluations = () => {
                 )}
                 {p.tipo_pregunta === "reconocimiento_voz" && (
                   <div className="mt-2 text-center">
+                    {/* --- BOTÓN PARA ESCUCHAR (NUEVO) --- */}
+                    <div className="mb-3">
+                      <p className="text-muted mb-1">Escucha y repite:</p>
+                      <CButton 
+                        color="warning" 
+                        variant="outline" 
+                        className="rounded-pill px-4"
+                        onClick={() => speakText(p.respuesta_correcta_texto)}
+                      >
+                        <CIcon icon={cilVolumeHigh} className="me-2"/> Escuchar Pronunciación
+                      </CButton>
+                    </div>
+                    {/* ----------------------------------- */}
+
                     <CButton color={isListening ? "danger" : "info"} className="text-white rounded-pill" onClick={() => startListening(p.id_pregunta)}>
                       <CIcon icon={cilMicrophone} className="me-2" />
                       {isListening ? "Escuchando..." : "Presiona para hablar"}

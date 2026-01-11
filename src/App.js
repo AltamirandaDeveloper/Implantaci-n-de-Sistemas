@@ -1,7 +1,6 @@
 // src/App.js
 import React, { Suspense, useEffect } from 'react'
 import { HashRouter, Route, Routes } from 'react-router-dom'
-import { useSelector } from 'react-redux'
 import { CSpinner, useColorModes } from '@coreui/react'
 import './scss/style.scss'
 import './scss/examples.scss'
@@ -17,22 +16,16 @@ const Page404 = React.lazy(() => import('./views/pages/page404/Page404'))
 const Page500 = React.lazy(() => import('./views/pages/page500/Page500'))
 
 const App = () => {
-  const { isColorModeSet, setColorMode } = useColorModes('coreui-free-react-admin-template-theme')
-  const storedTheme = useSelector((state) => state.theme)
+  // Mantenemos useColorModes pero solo para forzar el estado 'light'
+  const { setColorMode } = useColorModes('coreui-free-react-admin-template-theme')
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.href.split('?')[1])
-    const theme = urlParams.get('theme') && urlParams.get('theme').match(/^[A-Za-z0-9\s]+/)[0]
-    if (theme) {
-      setColorMode(theme)
-    }
-
-    if (isColorModeSet()) {
-      return
-    }
-
-    setColorMode(storedTheme)
-  }, [setColorMode, isColorModeSet, storedTheme])
+    // Forzamos el modo claro inmediatamente al cargar la App
+    setColorMode('light')
+    
+    // Opcional: Forzar el atributo en el HTML por si acaso
+    document.documentElement.setAttribute('data-coreui-theme', 'light')
+  }, [setColorMode])
 
   return (
     <HashRouter>

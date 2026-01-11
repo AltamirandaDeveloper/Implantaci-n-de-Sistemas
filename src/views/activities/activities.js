@@ -41,7 +41,7 @@ const Activities = () => {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('user')
+      const stored = sessionStorage.getItem('user')
       if (stored) {
         const parsed = JSON.parse(stored)
         const normalized = {

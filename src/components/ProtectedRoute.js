@@ -8,16 +8,19 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   useEffect(() => {
     const checkAuth = () => {
       try {
-        const auth = JSON.parse(localStorage.getItem('auth'))
-        const user = JSON.parse(localStorage.getItem('user'))
+        // CAMBIO: localStorage -> sessionStorage
+        const auth = JSON.parse(sessionStorage.getItem('auth'))
+        const user = JSON.parse(sessionStorage.getItem('user'))
 
         if (!auth || !user) {
           return setState({ loading: false, allowed: false })
         }
 
         if (Date.now() > auth.expiresAt) {
-          localStorage.removeItem('auth')
-          localStorage.removeItem('user')
+          // CAMBIO: localStorage -> sessionStorage
+          sessionStorage.removeItem('auth')
+          sessionStorage.removeItem('user')
+          sessionStorage.removeItem('token')
           return setState({ loading: false, allowed: false })
         }
 
@@ -36,7 +39,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     }
 
     checkAuth()
-  }, [])
+  }, [allowedRoles]) // Añadimos allowedRoles como dependencia para mayor seguridad
 
   if (state.loading) {
     return (
@@ -46,7 +49,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     )
   }
 
-  return state.allowed ? children : <Navigate to="/404" replace />
+  // Si no está permitido, redirigimos al login (o al 404 como tenías)
+  // Nota: Si no hay usuario en la pestaña actual, ahora irá directo a no permitido
+  return state.allowed ? children : <Navigate to="/login" replace />
 }
 
 export default ProtectedRoute

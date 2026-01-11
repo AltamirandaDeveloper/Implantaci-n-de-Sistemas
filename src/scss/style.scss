@@ -65,3 +65,43 @@ body {
     --cui-footer-bg: var(--cui-body-bg);
   }
 }
+
+/* ==========================================================================
+   PERSONALIZACIÓN DEL SIDEBAR (MODO MORADO COLEGIO SAN JUAN BAUTISTA)
+   ========================================================================== */
+
+.sidebar {
+  // Fondo Morado Principal
+  --cui-sidebar-bg: #824283;
+  
+  // Color del texto y los iconos (blanco con ligera transparencia para suavidad)
+  --cui-sidebar-nav-link-color: rgba(255, 255, 255, 0.85);
+  --cui-sidebar-nav-link-icon-color: rgba(255, 255, 255, 0.6);
+
+  // Efecto cuando el mouse pasa por encima (Hover)
+  --cui-sidebar-nav-link-hover-color: #ffffff;
+  --cui-sidebar-nav-link-hover-bg: rgba(255, 255, 255, 0.15);
+
+  // Color cuando el módulo está seleccionado (Active)
+  --cui-sidebar-nav-link-active-color: #ffffff;
+  --cui-sidebar-nav-link-active-bg: rgba(15, 78, 237, 0.2);
+
+  // Color de la cabecera del sidebar (donde está el monstruo/logo)
+  --cui-sidebar-brand-bg: rgba(0, 0, 0, 0.1);
+  
+  // Eliminamos bordes innecesarios para que se vea más limpio
+  border-right: none;
+}
+
+// Estilos específicos para el título "MÓDULOS" que centramos antes
+.sidebar-nav .nav-title {
+  color: rgba(255, 255, 255, 0.5) !important; // Un blanco muy tenue
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+// Aseguramos que los iconos cambien a blanco al hacer hover
+.sidebar-nav .nav-link:hover .nav-icon {
+  color: #ffffff !important;
+}
