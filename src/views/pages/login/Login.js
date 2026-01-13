@@ -94,14 +94,15 @@ const Login = () => {
         role: roleMap[user.id_role] || 'student'
       }
 
-      // 4. GESTIÓN DE SESIÓN (LocalStorage)
-      const SESSION_DURATION = 1000 * 60 * 60 * 8 // 8 horas
+    // ... (código anterior igual)
+
+      // 4. GESTIÓN DE SESIÓN
+      const SESSION_DURATION = 1000 * 60 * 60 * 8 
       const authData = {
         token: `supabase-auth-${userData.id}-${Date.now()}`,
         expiresAt: Date.now() + SESSION_DURATION,
       }
 
-      // CAMBIO AQUÍ: Usamos sessionStorage
       sessionStorage.setItem('auth', JSON.stringify(authData))
       sessionStorage.setItem('user', JSON.stringify(userData))
       sessionStorage.setItem('token', authData.token)
@@ -113,10 +114,17 @@ const Login = () => {
         success: '¡Inicio de sesión exitoso! Redirigiendo...'
       })
 
-      // Redirección después del éxito
+      // LOGICA DE REDIRECCIÓN CONDICIONAL
       setTimeout(() => {
-        navigate('/', { replace: true })
+        // Si el rol es 2 (Student), va a /content, si no, va a /dashboard
+        // Asegúrate de que user.id_role sea un número
+        if (Number(user.id_role) === 2) {
+            navigate('/content', { replace: true })
+        } else {
+            navigate('/dashboard', { replace: true }) // Admin y Docente
+        }
       }, 1500)
+
 
     } catch (error) {
       setStatus({

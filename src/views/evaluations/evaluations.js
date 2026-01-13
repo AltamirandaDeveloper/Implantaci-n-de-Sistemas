@@ -610,8 +610,8 @@ const Evaluations = () => {
         </CTabContent>
 
         {/* Modal Crear Evaluación */}
-        <CModal visible={visible} onClose={() => setVisible(false)}>
-          <CModalHeader>Nueva Evaluación</CModalHeader>
+        <CModal visible={visible}  backdrop = "static" onClose={() => setVisible(false)}>
+          <CModalHeader closeButton = {false}>Nueva Evaluación</CModalHeader>
           <CForm onSubmit={handleSaveEvaluation}>
             <CModalBody>
               <div className="mb-3">
@@ -656,7 +656,7 @@ const Evaluations = () => {
         </CModal>
 
         {/* Modal Gestionar Preguntas */}
-        <CModal visible={preguntasVisible} onClose={() => setPreguntasVisible(false)} size="xl">
+        <CModal visible={preguntasVisible} backdrop = "static" onClose={() => setPreguntasVisible(false)} size="xl">
           <CModalHeader>
             <CModalTitle>Preguntas ({puntosTotales} / 20 Puntos)</CModalTitle>
           </CModalHeader>
@@ -733,8 +733,8 @@ const Evaluations = () => {
         </CModal>
 
         {/* Modal de Confirmación para Eliminar Evaluación */}
-        <CModal visible={deleteModalVisible} onClose={() => setDeleteModalVisible(false)}>
-          <CModalHeader>Confirmar Eliminación</CModalHeader>
+        <CModal visible={deleteModalVisible} backdrop = "static" onClose={() => setDeleteModalVisible(false)}>
+          <CModalHeader closeButton = {false}>Confirmar Eliminación</CModalHeader>
           <CModalBody>
             ¿Estás seguro de eliminar la evaluación <strong>"{evaluationToDelete?.titulo}"</strong>? 
             <br /><br />
@@ -753,7 +753,7 @@ const Evaluations = () => {
         </CModal>
 
         {/* Modal de Confirmación para Eliminar Pregunta */}
-        <CModal visible={deletePreguntaModalVisible} onClose={() => setDeletePreguntaModalVisible(false)}>
+        <CModal visible={deletePreguntaModalVisible} backdrop = "static" onClose={() => setDeletePreguntaModalVisible(false)}>
           <CModalHeader>Confirmar Eliminación</CModalHeader>
           <CModalBody>
             ¿Estás seguro de eliminar esta pregunta?
@@ -890,7 +890,7 @@ const Evaluations = () => {
       </CModal>
 
       {/* Modal de Confirmación de Entrega (Estudiante) */}
-      <CModal visible={submitConfirmModalVisible} onClose={() => setSubmitConfirmModalVisible(false)}>
+      <CModal visible={submitConfirmModalVisible} backdrop = "static" onClose={() => setSubmitConfirmModalVisible(false)}>
         <CModalHeader>Confirmar Entrega</CModalHeader>
         <CModalBody>
           <div className="text-center mb-3">
@@ -925,7 +925,7 @@ const Evaluations = () => {
       )}
 
       {/* Modal de Resultados del Examen (Estudiante) */}
-      <CModal visible={examResultModalVisible} onClose={closeExamResultModal}>
+      <CModal visible={examResultModalVisible} backdrop = "static" onClose={closeExamResultModal}>
         <CModalHeader className="border-0 pb-0">
           <div className="text-center w-100">
             {examResult?.aprobado ? (

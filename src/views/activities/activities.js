@@ -260,7 +260,7 @@ const Activities = () => {
       </CCol>
 
       {/* MODAL INFO */}
-      <CModal visible={infoModal.visible} onClose={() => setInfoModal({ visible: false, data: null })}>
+      <CModal visible={infoModal.visible} backdrop = "static" onClose={() => setInfoModal({ visible: false, data: null })}>
         <CModalHeader><CModalTitle>Detalles de Actividad</CModalTitle></CModalHeader>
         <CModalBody>
           {infoModal.data && (
@@ -279,8 +279,8 @@ const Activities = () => {
       </CModal>
 
       {/* MODAL FORMULARIO */}
-      <CModal visible={visible} onClose={handleCloseModal} size="lg">
-        <CModalHeader><CModalTitle>{editMode ? "Editar" : "Nueva"} Actividad</CModalTitle></CModalHeader>
+      <CModal visible={visible}  backdrop = "static" onClose={handleCloseModal} size="lg">
+        <CModalHeader closeButton = {false}><CModalTitle>{editMode ? "Editar" : "Nueva"} Actividad</CModalTitle></CModalHeader>
         <CForm onSubmit={handleSubmit}>
           <CModalBody>
             <div className="mb-3">
@@ -325,8 +325,8 @@ const Activities = () => {
       </CModal>
 
       {/* MODAL ELIMINAR */}
-      <CModal visible={deleteModal.visible} onClose={() => setDeleteModal({ visible: false, id: null })}>
-        <CModalHeader><CModalTitle>Confirmar eliminación</CModalTitle></CModalHeader>
+      <CModal visible={deleteModal.visible} backdrop = "static" onClose={() => setDeleteModal({ visible: false, id: null })}>
+        <CModalHeader closeButton = {false}><CModalTitle>Confirmar eliminación</CModalTitle></CModalHeader>
         <CModalBody>¿Estás seguro de que deseas eliminar esta actividad? Esta acción no se puede deshacer.</CModalBody>
         <CModalFooter>
           <CButton color="secondary" onClick={() => setDeleteModal({ visible: false, id: null })}>Cancelar</CButton>

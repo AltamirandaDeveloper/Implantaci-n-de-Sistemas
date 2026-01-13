@@ -218,8 +218,8 @@ const Profile = () => {
       </CContainer>
 
       {/* Modal Editar */}
-      <CModal visible={showEditModal} onClose={() => setShowEditModal(false)}>
-        <CModalHeader style={purpleStyle} className="text-white">
+      <CModal visible={showEditModal} backdrop = "static" onClose={() => setShowEditModal(false)}>
+        <CModalHeader style={purpleStyle} closeButton = {false} className="text-white">
           <CModalTitle>Editar Datos</CModalTitle>
         </CModalHeader>
         <CModalBody>
@@ -237,8 +237,8 @@ const Profile = () => {
       </CModal>
 
       {/* Modal Password */}
-      <CModal visible={showPasswordModal} onClose={() => setShowPasswordModal(false)}>
-        <CModalHeader style={purpleStyle} className="text-white">
+      <CModal visible={showPasswordModal} backdrop = "static" onClose={() => setShowPasswordModal(false)}>
+        <CModalHeader closeButton = {false} style={purpleStyle} className="text-white">
           <CModalTitle>Seguridad</CModalTitle>
         </CModalHeader>
         <CModalBody>

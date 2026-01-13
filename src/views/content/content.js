@@ -298,8 +298,8 @@ const Content = () => {
       </CCol>
 
       {/* MODAL DETALLES */}
-      <CModal visible={infoModal.visible} onClose={() => setInfoModal({ visible: false, data: null })} size="lg">
-        <CModalHeader><CModalTitle>Detalles del Contenido</CModalTitle></CModalHeader>
+      <CModal visible={infoModal.visible} backdrop = "static" onClose={() => setInfoModal({ visible: false, data: null })} size="lg">
+        <CModalHeader closeButton = {false}><CModalTitle>Detalles del Contenido</CModalTitle></CModalHeader>
         <CModalBody>
           {infoModal.data && (
             <CRow>
@@ -327,7 +327,7 @@ const Content = () => {
 
       {/* MODAL FORMULARIO */}
       <CModal visible={visible} onClose={() => setVisible(false)} size="lg" backdrop="static">
-        <CModalHeader><CModalTitle>{isEdit ? "Editar Contenido" : "Subir Nuevo Contenido"}</CModalTitle></CModalHeader>
+        <CModalHeader closeButton = {false}><CModalTitle>{isEdit ? "Editar Contenido" : "Subir Nuevo Contenido"}</CModalTitle></CModalHeader>
         <CForm onSubmit={handleSubmit}>
           <CModalBody>
             <div className="mb-3">
@@ -363,8 +363,8 @@ const Content = () => {
       </CModal>
 
       {/* MODAL ELIMINAR */}
-      <CModal visible={deleteModal.visible} onClose={() => setDeleteModal({ visible: false, id: null })}>
-        <CModalHeader><CModalTitle>Confirmar</CModalTitle></CModalHeader>
+      <CModal visible={deleteModal.visible} backdrop = "static" onClose={() => setDeleteModal({ visible: false, id: null })}>
+        <CModalHeader closeButton = {false}><CModalTitle>Confirmar</CModalTitle></CModalHeader>
         <CModalBody>¿Estás seguro de eliminar este recurso educativo?</CModalBody>
         <CModalFooter>
           <CButton color="secondary" onClick={() => setDeleteModal({ visible: false, id: null })}>Cancelar</CButton>

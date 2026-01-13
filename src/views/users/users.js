@@ -482,61 +482,79 @@ const Users = () => {
 
   const handleDeleteConfirm = async () => {
     if (!userToDelete) return
+    
     try {
       setIsSubmitting(true)
-      const roleId = Number(userToEdit.id_role)
-
-      // Build payload for validation
-      const payload = {
-        nombre: userToEdit.nombre,
-        apellido: userToEdit.apellido,
-        cedula: userToEdit.cedula,
-        telefono: userToEdit.telefono,
-        email: userToEdit.email,
-        password: userToEdit.password || '',
-        id_role: roleId,
+      
+      // 1. Primero, manejar las relaciones dependiendo del rol
+      const roleId = Number(userToDelete.id_role)
+      
+      if (roleId === 3) { // Docente
+        // Buscar el registro del docente
+        const docenteRes = await supabase
+          .from('docente')
+          .select('*')
+          .eq('id_usuario', userToDelete.id)
+          .single()
+        
+        if (docenteRes.data) {
+          // Eliminar las relaciones con grados primero
+          await supabase
+            .from('docente_grados')
+            .delete()
+            .eq('id_docente', docenteRes.data.id)
+          
+          // Luego eliminar el registro del docente
+          await supabase
+            .from('docente')
+            .delete()
+            .eq('id', docenteRes.data.id)
+        }
       }
-      if (roleId === 2) payload.grados = gradosSeleccionados
-      if (roleId === 3) payload.grados = gradosSeleccionados
-
-      // Choose schema for update (omit grados for admins)
-      const schema = roleId === 1 ? updateUserSchema.omit({ grados: true }) : updateUserSchema
-      const parsed = schema.safeParse(payload)
-      if (!parsed.success) {
-        const errors = {}
-        parsed.error.issues.forEach((i) => {
-          const key = i.path && i.path.length ? i.path[0] : '_'
-          errors[key] = i.message
-        })
-        setFormErrors(errors)
-        setIsSubmitting(false)
-        return
+      
+      if (roleId === 2) { // Estudiante
+        // Eliminar el registro del estudiante
+        await supabase
+          .from('estudiantes')
+          .delete()
+          .eq('id_usuario', userToDelete.id)
       }
-
-      if (roleId === 2 && (!gradosSeleccionados || gradosSeleccionados.length !== 1)) {
-        setAlertData({ type: 'danger', response: { message: 'Seleccione un grado para el estudiante' } })
-        setIsSubmitting(false)
-        return
-      }
-
-      if (roleId === 3 && (!gradosSeleccionados || gradosSeleccionados.length === 0)) {
-        setAlertData({ type: 'danger', response: { message: 'Seleccione grados para el docente' } })
-        setIsSubmitting(false)
-        return
-      }
-
-      const usuarioData = {
-        nombre: userToEdit.nombre,
-        apellido: userToEdit.apellido,
-        cedula: userToEdit.cedula,
-        email: userToEdit.email,
-        telefono: userToEdit.telefono,
-        id_role: roleId,
-      }
-      if (userToEdit.password && userToEdit.password.trim() !== '') usuarioData.password = userToEdit.password
-      console.error('Error eliminando usuario:', err)
-      setAlertData({ type: 'danger', response: { message: err.message || 'Error al eliminar usuario' } })
+      
+      // 2. Finalmente, eliminar el usuario principal
+      const { error } = await supabase
+        .from('usuarios')
+        .delete()
+        .eq('id', userToDelete.id)
+      
+      if (error) throw error
+      
+      // 3. Mostrar éxito
+      setAlertData({ 
+        type: 'success', 
+        response: { message: 'Usuario eliminado correctamente' } 
+      })
+      
+      // 4. Cerrar modal y actualizar lista
       setDeleteModal(false)
+      
+      // Actualizar la lista local inmediatamente
+      setUsuarios(prevUsuarios => 
+        prevUsuarios.filter(user => user.id !== userToDelete.id)
+      )
+      
+      // También actualizar gradosPorUsuario
+      setGradosPorUsuario(prev => {
+        const copy = { ...prev }
+        delete copy[userToDelete.id]
+        return copy
+      })
+      
+    } catch (err) {
+      console.error('Error eliminando usuario:', err)
+      setAlertData({ 
+        type: 'danger', 
+        response: { message: err.message || 'Error al eliminar usuario' } 
+      })
     } finally {
       setUserToDelete(null)
       setIsSubmitting(false)
@@ -599,7 +617,14 @@ const Users = () => {
                     <CButton size="sm" color="primary" className="me-1" onClick={() => handleEdit(user)}>
                       <CIcon icon={cilPencil} />
                     </CButton>
-                    <CButton size="sm" color="danger" className="text-white" onClick={() => handleDeleteClick(user)}>
+                    <CButton 
+                      size="sm" 
+                      color="danger" 
+                      className="text-white"
+                      onClick={() => handleDeleteClick(user)}
+                      disabled={Number(user.id_role) === 1} 
+                      title={Number(user.id_role) === 1 ? "No se pueden eliminar administradores" : ""}
+                    >
                       <CIcon icon={cilTrash} />
                     </CButton>
                   </CTableDataCell>
@@ -611,8 +636,8 @@ const Users = () => {
       </CCard>
 
       {/* MODAL CREAR USUARIO */}
-      <CModal visible={addModal} onClose={() => { setAddModal(false); resetForm(); }}>
-        <CModalHeader>
+      <CModal visible={addModal} backdrop = "static" onClose={() => { setAddModal(false); resetForm(); }}>
+        <CModalHeader closeButton = {false}>
           <CModalTitle>Crear Nuevo Usuario</CModalTitle>
         </CModalHeader>
         <CModalBody>
@@ -673,8 +698,8 @@ const Users = () => {
       </CModal>
 
       {/* MODAL EDITAR USUARIO */}
-      <CModal visible={editModal} onClose={() => { setEditModal(false); setUserToEdit(null); setGradosSeleccionados([]); setAlertData(null); setFormErrors({}); }}>
-        <CModalHeader><CModalTitle>Editar Usuario</CModalTitle></CModalHeader>
+      <CModal visible={editModal} backdrop = "static" onClose={() => { setEditModal(false); setUserToEdit(null); setGradosSeleccionados([]); setAlertData(null); setFormErrors({}); }}>
+        <CModalHeader closeButton = {false}><CModalTitle>Editar Usuario</CModalTitle></CModalHeader>
         <CModalBody>
           <AlertMessage response={alertData?.response} type={alertData?.type} onClose={() => setAlertData(null)} />
           {userToEdit ? (
@@ -724,8 +749,8 @@ const Users = () => {
       </CModal>
 
       {/* MODAL DETALLE */}
-      <CModal visible={detailModal} onClose={() => setDetailModal(false)}>
-        <CModalHeader><CModalTitle>Detalle del usuario</CModalTitle></CModalHeader>
+      <CModal visible={detailModal} backdrop = "static" onClose={() => setDetailModal(false)}>
+        <CModalHeader closeButton = {false}><CModalTitle>Detalle del usuario</CModalTitle></CModalHeader>
         <CModalBody>
           {userToView && (
             <>
@@ -746,27 +771,57 @@ const Users = () => {
       </CModal>
 
       {/* MODAL ELIMINAR */}
-      <CModal visible={deleteModal} onClose={() => { setDeleteModal(false); setUserToDelete(null); }}>
-        <CModalHeader className="bg-danger text-white"><CModalTitle>Confirmar Eliminación</CModalTitle></CModalHeader>
+      <CModal visible={deleteModal} backdrop = "static" onClose={() => { setDeleteModal(false); setUserToDelete(null); }}>
+        <CModalHeader className="bg-danger text-white" closeButton = {false}>
+          <CModalTitle>Confirmar Eliminación</CModalTitle>
+        </CModalHeader>
         <CModalBody className="text-center">
           {userToDelete && (
             <>
               <div className="mb-4 d-flex justify-content-center">
-                <CAvatar color="danger" size="xl" className="border border-3 border-danger"><CIcon icon={cilUser} size="xl" /></CAvatar>
+                <CAvatar color="danger" size="xl" className="border border-3 border-danger">
+                  <CIcon icon={cilWarning} size="xl" />
+                </CAvatar>
               </div>
               <h5 className="text-danger fw-bold mb-3">¿Está seguro de eliminar este usuario?</h5>
               <div className="alert alert-warning text-start mb-3">
                 <strong>{userToDelete.nombre} {userToDelete.apellido}</strong>
                 <div className="small">Email: {userToDelete.email}</div>
                 <div className="small">Rol: {roles.find(r => r.id === userToDelete.id_role)?.nombre_rol || userToDelete.id_role}</div>
-                {gradosPorUsuario[userToDelete.id]?.length > 0 && <div className="small">Grados: {gradosPorUsuario[userToDelete.id].join(', ')}</div>}
+                {gradosPorUsuario[userToDelete.id]?.length > 0 && (
+                  <div className="small">Grados: {gradosPorUsuario[userToDelete.id].join(', ')}</div>
+                )}
               </div>
+              <p className="text-muted">
+                <small>
+                  Esta acción no se puede deshacer. El usuario será eliminado permanentemente.
+                </small>
+              </p>
             </>
           )}
         </CModalBody>
         <CModalFooter>
-          <CButton color="secondary" onClick={() => { setDeleteModal(false); setUserToDelete(null); }}>Cancelar</CButton>
-          <CButton color="danger" onClick={handleDeleteConfirm}>Sí, Eliminar</CButton>
+          <CButton 
+            color="secondary" 
+            onClick={() => { setDeleteModal(false); setUserToDelete(null); }}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </CButton>
+          <CButton 
+            color="danger" 
+            onClick={handleDeleteConfirm}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <CSpinner size="sm" className="me-2" />
+                Eliminando...
+              </>
+            ) : (
+              'Sí, Eliminar'
+            )}
+          </CButton>
         </CModalFooter>
       </CModal>
     </div>

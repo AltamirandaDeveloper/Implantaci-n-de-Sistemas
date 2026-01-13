@@ -7,10 +7,10 @@ const Evaluations = React.lazy(() => import('./views/evaluations/evaluations'))
 const Activities = React.lazy(() => import('./views/activities/activities'))
 const Content = React.lazy(() => import('./views/content/content'))
 
-
 const routes = [
   { path: '/', exact: true, name: 'Home' },
-  { path: '/dashboard', name: 'Dashboard', element: Dashboard },
+  // AGREGAMOS allowedRoles AQUÍ (1: Admin, 3: Teacher)
+  { path: '/dashboard', name: 'Dashboard', element: Dashboard, allowedRoles: [1, 3] },
   { path: '/users', name: 'Usuarios', element: Users, allowedRoles: [1, 3] },
   { path: '/profile', name: 'Perfil', element: Profile },
   { path: '/evaluations', name: 'Evaluations', element: Evaluations },
