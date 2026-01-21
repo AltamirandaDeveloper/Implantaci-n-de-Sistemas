@@ -1,0 +1,68 @@
+/* Contenedor principal de la animación */
+.background-anim-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  /* Color de fondo: Cámbialo aquí si quieres otro color */
+  background-color: #824283; 
+  overflow: hidden;
+  z-index: -1; /* Se va al fondo de todo automáticamente */
+  pointer-events: none; /* Permite dar clic a través de las olas */
+}
+
+.box {
+  position: absolute;
+  top: 0;
+  transform: rotate(80deg);
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wave {
+  position: absolute;
+  top: 3%;
+  left: 10%;
+  background: #824283;
+  width: 1500px;
+  height: 1300px;
+  margin-left: -150px;
+  margin-top: -250px;
+  transform-origin: 50% 48%;
+  border-radius: 43%;
+  animation: drift 7000ms infinite linear;
+  opacity: .4;
+  z-index: 1;
+}
+
+.wave.-three {
+  animation: drift 7500ms infinite linear;
+  background-color: #fefbff;
+  z-index: 2;
+  opacity: 0.4;
+}
+
+.wave.-two {
+  animation: drift 3000ms infinite linear;
+  opacity: .1;
+  background: black;
+  z-index: 3;
+}
+
+.box:after {
+  content: '';
+  display: block;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 11;
+  transform: translate3d(0, 0, 0);
+}
+
+@keyframes drift {
+  from { transform: rotate(0deg); }
+  from { transform: rotate(360deg); }
+}

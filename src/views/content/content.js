@@ -9,14 +9,12 @@ import {
   CTableDataCell, CBadge, CSpinner, CProgress, CListGroup, CListGroupItem
 } from "@coreui/react"
 import CIcon from "@coreui/icons-react"
-import { cilPlus, cilTrash, cilCloudDownload, cilPencil, cilInfo } from "@coreui/icons"
+import { cilPlus, cilTrash, cilCloudDownload, cilPencil, cilInfo, cilFile, cilLink, cilExternalLink } from "@coreui/icons"
 import AlertMessage from "../../components/ui/AlertMessage"
 
 // 1. IMPORTAR SUPABASE
 import { supabase } from '../../lib/supabase';  
-// Zod schema
 import { createContentSchema, updateContentSchema } from '../../../schemas/content.schema'
-import { useCallback } from 'react'
 
 // URL del backend desplegado
 const BACKEND_URL = 'https://backend-implantacion.onrender.com'
@@ -35,25 +33,43 @@ const Content = () => {
   const [infoModal, setInfoModal] = useState({ visible: false, data: null })
   const [deleteModal, setDeleteModal] = useState({ visible: false, id: null })
   
+  // Modificado: Agregamos 'enlace_relacionado' al estado del formulario
   const [formData, setFormData] = useState({
-    id: null, titulo: "", descripcion: "", grado_objetivo: "",
+    id: null, titulo: "", descripcion: "", grado_objetivo: "", enlace_relacionado: ""
   })
+  
   const [formErrors, setFormErrors] = useState({})
 
-  // Obtener usuario del localStorage (ya configurado en el login de Supabase)
+  // --- OBTENER CONTEXTO DE USUARIO ---
   const user = JSON.parse(sessionStorage.getItem("user") || "{}")
-  const isDocente = user.id_role === 1 || user.id_role === 3 // Admin o Docente
+  const idRole = Number(user.id_role)
+  const isDocente = idRole === 1 || idRole === 3 
+  const isTeacher = idRole === 3 
+  const isStudent = idRole === 2 
 
   useEffect(() => {
     fetchData()
   }, [])
 
-  // 2. FETCH DATA DESDE SUPABASE
+  // 2. FETCH DATA
   const fetchData = async () => {
     try {
       setLoading(true)
+      
+      let query = supabase.from('contenidos').select('*').order('id', { ascending: false })
+
+      if (isStudent) {
+        if (user.id_grado) {
+          query = query.eq('grado_objetivo', user.id_grado)
+        } else {
+          setContenidos([])
+          setLoading(false)
+          return 
+        }
+      }
+      
       const [contentRes, gradosRes] = await Promise.all([
-        supabase.from('contenidos').select('*').order('id', { ascending: false }),
+        query,
         supabase.from('grados').select('*')
       ])
       
@@ -80,7 +96,36 @@ const Content = () => {
     }
   }
 
-  // Mantenemos tu lógica de Cloudinary (servicio externo)
+  const handleOpenNew = () => {
+    setIsEdit(false)
+    const defaultGrado = isTeacher ? user.id_grado : ""
+    
+    setFormData({ 
+      id: null, 
+      titulo: "", 
+      descripcion: "", 
+      grado_objetivo: defaultGrado,
+      enlace_relacionado: "" // Limpiar el enlace
+    })
+    setFile(null)
+    setFormErrors({})
+    setVisible(true)
+  }
+
+  // --- CARGAR DATOS AL EDITAR ---
+  const handleEditClick = (c) => {
+    setFormData({ 
+        id: c.id, 
+        titulo: c.titulo, 
+        descripcion: c.descripcion, 
+        grado_objetivo: c.grado_objetivo,
+        enlace_relacionado: c.enlace_relacionado || "" // Cargar enlace si existe
+    })
+    
+    setIsEdit(true)
+    setVisible(true)
+  }
+
   const uploadToCloudinary = async () => {
     const fd = new FormData()
     fd.append("file", file)
@@ -102,39 +147,49 @@ const Content = () => {
     }
   }
 
-  // 3. SUBMIT (INSERT / UPDATE) EN SUPABASE
+  // 3. SUBMIT
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
       setFormErrors({})
 
-      // Build payload to validate
-      const payload = {
+      let gradoFinal = Number(formData.grado_objetivo)
+      if (isTeacher) {
+         gradoFinal = Number(user.id_grado)
+      }
+
+      // Validamos SOLO los campos básicos con Zod
+      const payloadToValidate = {
         titulo: formData.titulo,
         descripcion: formData.descripcion,
-        grado_objetivo: Number(formData.grado_objetivo),
+        grado_objetivo: gradoFinal,
       }
 
       const schema = isEdit ? updateContentSchema : createContentSchema
-      const parsed = schema.safeParse(payload)
+      const parsed = schema.safeParse(payloadToValidate)
+
       if (!parsed.success) {
         const errors = {}
         parsed.error.issues.forEach((i) => {
-          const key = i.path && i.path.length ? i.path[0] : '_'
+          const key = i.path[0] 
           errors[key] = i.message
         })
         setFormErrors(errors)
         return
       }
 
+      // Preparamos el objeto para Supabase
+      const supabaseData = {
+          titulo: formData.titulo,
+          descripcion: formData.descripcion,
+          grado_objetivo: gradoFinal,
+          enlace_relacionado: formData.enlace_relacionado || null // <--- UN SOLO ENLACE
+      }
+
       if (isEdit) {
         const { error } = await supabase
           .from('contenidos')
-          .update({
-            titulo: formData.titulo,
-            descripcion: formData.descripcion,
-            grado_objetivo: Number(formData.grado_objetivo)
-          })
+          .update(supabaseData)
           .eq('id', formData.id)
 
         if (error) throw error
@@ -152,10 +207,8 @@ const Content = () => {
         else if (uploaded.mime.includes("video")) tipo = "video"
         else if (uploaded.mime.includes("pdf")) tipo = "pdf"
 
-        const contentData = {
-          titulo: formData.titulo,
-          descripcion: formData.descripcion,
-          grado_objetivo: Number(formData.grado_objetivo),
+        const insertData = {
+          ...supabaseData,
           archivo_url: uploaded.url,
           archivo_nombre: file.name,
           archivo_tipo: uploaded.mime,
@@ -166,26 +219,21 @@ const Content = () => {
 
         const { error } = await supabase
           .from('contenidos')
-          .insert([contentData])
+          .insert([insertData])
 
         if (error) throw error
         setAlert({ message: "Contenido guardado con éxito", type: "success" })
       }
       setVisible(false); setFile(null); setIsEdit(false); fetchData()
-      setFormData({ id: null, titulo: "", descripcion: "", grado_objetivo: "" })
+      setFormData({ id: null, titulo: "", descripcion: "", grado_objetivo: "", enlace_relacionado: "" })
     } catch (error) {
       setAlert({ message: "Error: " + error.message, type: "danger" })
     }
   }
 
-  // 4. DELETE EN SUPABASE
   const handleDelete = async () => {
     try {
-      const { error } = await supabase
-        .from('contenidos')
-        .delete()
-        .eq('id', deleteModal.id)
-      
+      const { error } = await supabase.from('contenidos').delete().eq('id', deleteModal.id)
       if (error) throw error
       setAlert({ message: "Contenido eliminado correctamente", type: "success" })
       setDeleteModal({ visible: false, id: null }); fetchData()
@@ -194,12 +242,6 @@ const Content = () => {
     }
   }
 
-  const handleEditClick = (c) => {
-    setFormData({ id: c.id, titulo: c.titulo, descripcion: c.descripcion, grado_objetivo: c.grado_objetivo })
-    setIsEdit(true); setVisible(true)
-  }
-
-  // Helpers de UI (Mantenidos igual para no romper tu diseño)
   const getFileLink = (contenido) => {
     if (contenido.tipo === "pdf") return `${BACKEND_URL}/download?url=${encodeURIComponent(contenido.archivo_url)}`
     return contenido.archivo_url
@@ -219,6 +261,42 @@ const Content = () => {
     return "📎"
   }
 
+  const renderMediaPreview = (contenido) => {
+    const isImage = contenido.tipo === 'image' || contenido.archivo_tipo?.includes('image')
+    const isVideo = contenido.tipo === 'video' || contenido.archivo_tipo?.includes('video')
+
+    if (isImage) {
+        return (
+            <div className="text-center bg-dark rounded mb-3 d-flex align-items-center justify-content-center" style={{ minHeight: '200px', overflow: 'hidden' }}>
+                <img 
+                    src={contenido.archivo_url} 
+                    alt="Vista previa" 
+                    className="img-fluid rounded" 
+                    style={{ maxHeight: '400px', width: '100%', objectFit: 'contain' }} 
+                />
+            </div>
+        )
+    }
+
+    if (isVideo) {
+        return (
+            <div className="ratio ratio-16x9 mb-3 rounded overflow-hidden shadow-sm">
+                <video controls className="w-100 h-100" style={{ backgroundColor: '#000' }}>
+                    <source src={contenido.archivo_url} type={contenido.archivo_tipo || 'video/mp4'} />
+                    Tu navegador no soporta el elemento de video.
+                </video>
+            </div>
+        )
+    }
+
+    return (
+        <div className="text-center bg-light rounded mb-3 p-4 border">
+            <CIcon icon={contenido.tipo === 'pdf' ? cilCloudDownload : cilFile} size="5xl" className="text-secondary mb-2"/>
+            <p className="text-muted m-0 small">Vista previa no disponible para este formato.</p>
+        </div>
+    )
+  }
+
   if (loading) return <div className="text-center p-5"><CSpinner color="primary" /><p className="mt-2">Cargando contenido...</p></div>
 
   return (
@@ -230,14 +308,14 @@ const Content = () => {
           <CCardHeader className="d-flex justify-content-between align-items-center bg-white">
             <strong className="fs-5">Módulo de Contenido Educativo</strong>
             {isDocente && (
-              <CButton color="primary" onClick={() => { setIsEdit(false); setVisible(true); }}>
+              <CButton color="primary" onClick={handleOpenNew}>
                 <CIcon icon={cilPlus} className="me-2" /> Nuevo Contenido
               </CButton>
             )}
           </CCardHeader>
           <CCardBody>
             {contenidos.length === 0 ? (
-              <div className="text-center py-5"><p className="text-muted">No hay contenido disponible.</p></div>
+              <div className="text-center py-5"><p className="text-muted">No hay contenido disponible para tu grado.</p></div>
             ) : (
               <CTable hover responsive align="middle">
                 <CTableHead color="light">
@@ -298,15 +376,30 @@ const Content = () => {
       </CCol>
 
       {/* MODAL DETALLES */}
-      <CModal visible={infoModal.visible} backdrop = "static" onClose={() => setInfoModal({ visible: false, data: null })} size="lg">
-        <CModalHeader closeButton = {false}><CModalTitle>Detalles del Contenido</CModalTitle></CModalHeader>
+      <CModal visible={infoModal.visible} backdrop="static" onClose={() => setInfoModal({ visible: false, data: null })} size="lg">
+        <CModalHeader closeButton={false}><CModalTitle>Detalles del Contenido</CModalTitle></CModalHeader>
         <CModalBody>
           {infoModal.data && (
             <CRow>
               <CCol md={12}>
-                <h4 className="text-primary">{infoModal.data.titulo}</h4>
-                <p className="mt-3"><strong>Descripción:</strong></p>
-                <div className="p-3 bg-light rounded mb-3">{infoModal.data.descripcion}</div>
+                
+                <h4 className="text-primary mt-3">{infoModal.data.titulo}</h4>
+                <p className="mt-2"><strong>Descripción:</strong></p>
+                <div className="p-3 bg-light rounded mb-3 border">{infoModal.data.descripcion}</div>
+                
+                {/* --- SECCIÓN DE ENLACE UNICO (SI EXISTE) --- */}
+                {infoModal.data.enlace_relacionado && (
+                    <div className="mb-3 p-3 bg-light border rounded">
+                        <p className="mb-1 fw-bold text-secondary small">ENLACE RELACIONADO</p>
+                        <a href={infoModal.data.enlace_relacionado} target="_blank" rel="noopener noreferrer" className="text-decoration-none d-flex align-items-center">
+                            <CIcon icon={cilLink} className="me-2"/>
+                            <span className="text-truncate">{infoModal.data.enlace_relacionado}</span>
+                            <CIcon icon={cilExternalLink} size="sm" className="ms-2 text-muted"/>
+                        </a>
+                    </div>
+                )}
+                {/* ------------------------------------------- */}
+                {renderMediaPreview(infoModal.data)}
                 <CListGroup flush>
                   <CListGroupItem><strong>Tipo:</strong> {getTipoBadge(infoModal.data)}</CListGroupItem>
                   <CListGroupItem><strong>Dirigido a:</strong> Grado {grados.find(g => g.id === infoModal.data.grado_objetivo)?.nombre || infoModal.data.grado_objetivo}</CListGroupItem>
@@ -319,7 +412,7 @@ const Content = () => {
         </CModalBody>
         <CModalFooter>
           <CButton color="primary" href={infoModal.data ? getFileLink(infoModal.data) : '#'} target="_blank">
-            <CIcon icon={cilCloudDownload} className="me-2" /> Descargar/Ver
+            <CIcon icon={cilCloudDownload} className="me-2" /> Descargar/Ver Archivo Original
           </CButton>
           <CButton color="secondary" onClick={() => setInfoModal({ visible: false, data: null })}>Cerrar</CButton>
         </CModalFooter>
@@ -327,7 +420,7 @@ const Content = () => {
 
       {/* MODAL FORMULARIO */}
       <CModal visible={visible} onClose={() => setVisible(false)} size="lg" backdrop="static">
-        <CModalHeader closeButton = {false}><CModalTitle>{isEdit ? "Editar Contenido" : "Subir Nuevo Contenido"}</CModalTitle></CModalHeader>
+        <CModalHeader closeButton={false}><CModalTitle>{isEdit ? "Editar Contenido" : "Subir Nuevo Contenido"}</CModalTitle></CModalHeader>
         <CForm onSubmit={handleSubmit}>
           <CModalBody>
             <div className="mb-3">
@@ -338,13 +431,40 @@ const Content = () => {
               <CFormLabel>Descripción *</CFormLabel>
               <CFormTextarea name="descripcion" value={formData.descripcion} onChange={handleInputChange} rows="3" required invalid={!!formErrors.descripcion} feedback={formErrors.descripcion} />
             </div>
+            
+            {/* INPUT DE ENLACE UNICO */}
+            <div className="mb-3">
+              <CFormLabel>Enlace Relacionado (Opcional)</CFormLabel>
+              <CFormInput 
+                name="enlace_relacionado" 
+                placeholder="Ej: https://youtube.com/watch?v=..." 
+                value={formData.enlace_relacionado} 
+                onChange={handleInputChange} 
+              />
+              <div className="form-text">Pega aquí una URL para complementar el tema.</div>
+            </div>
+
             <div className="mb-3">
               <CFormLabel>Grado Objetivo *</CFormLabel>
-              <CFormSelect name="grado_objetivo" value={formData.grado_objetivo} onChange={handleInputChange} required invalid={!!formErrors.grado_objetivo} feedback={formErrors.grado_objetivo}>
+              <CFormSelect 
+                name="grado_objetivo" 
+                value={formData.grado_objetivo} 
+                onChange={handleInputChange} 
+                required 
+                disabled={isTeacher}
+                invalid={!!formErrors.grado_objetivo} 
+                feedback={formErrors.grado_objetivo}
+              >
                 <option value="">Seleccione un grado</option>
                 {grados.map((g) => <option key={g.id} value={g.id}>Grado {g.nombre}</option>)}
               </CFormSelect>
+              {isTeacher && (
+                <div className="form-text text-muted">
+                    Tu usuario está asignado automáticamente a este grado.
+                </div>
+              )}
             </div>
+
             {!isEdit && (
               <div className="mb-3">
                 <CFormLabel>Archivo (PDF, Imagen, Video) *</CFormLabel>
@@ -363,8 +483,8 @@ const Content = () => {
       </CModal>
 
       {/* MODAL ELIMINAR */}
-      <CModal visible={deleteModal.visible} backdrop = "static" onClose={() => setDeleteModal({ visible: false, id: null })}>
-        <CModalHeader closeButton = {false}><CModalTitle>Confirmar</CModalTitle></CModalHeader>
+      <CModal visible={deleteModal.visible} backdrop="static" onClose={() => setDeleteModal({ visible: false, id: null })}>
+        <CModalHeader closeButton={false}><CModalTitle>Confirmar</CModalTitle></CModalHeader>
         <CModalBody>¿Estás seguro de eliminar este recurso educativo?</CModalBody>
         <CModalFooter>
           <CButton color="secondary" onClick={() => setDeleteModal({ visible: false, id: null })}>Cancelar</CButton>

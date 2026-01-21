@@ -22,6 +22,9 @@ import {
   CFormLabel,
   CSpinner,
   CAvatar,
+  CContainer,
+  CRow,
+  CCol
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
 import {
@@ -42,6 +45,11 @@ import AlertMessage from '../../components/ui/AlertMessage'
 import { createUserSchema, updateUserSchema } from '../../../schemas/users.schema'
 
 const Users = () => {
+  // --- ESTADO DE SESIÓN ---
+  const [currentUser, setCurrentUser] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isTeacher, setIsTeacher] = useState(false)
+
   const [usuarios, setUsuarios] = useState([])
   const [roles, setRoles] = useState([])
   const [grados, setGrados] = useState([])
@@ -75,34 +83,15 @@ const Users = () => {
 
   /* ================= FETCH DATA & INIT (Supabase) ================= */
 
-  const fetchUsuarios = async (currentGrados = grados) => {
-    try {
-      setLoading(true)
-      const usersRes = await supabase
-        .from('usuarios')
-        .select(`
-          *,
-          estudiantes (id, id_grado),
-          docente (id, id_usuario, docente_grados (id, id_grado))
-        `)
-        .order('fecha_registro', { ascending: false })
-
-      if (usersRes.error) throw usersRes.error
-      const users = usersRes.data || []
-      setUsuarios(users)
-      await fetchGradosUsuarios(users, currentGrados)
-    } catch (err) {
-      setAlertData({
-        type: 'danger',
-        response: { message: 'Error al cargar usuarios' }
-      })
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
+    // 1. Cargar Sesión
+    const session = JSON.parse(sessionStorage.getItem("user") || "{}")
+    setCurrentUser(session)
+    const role = Number(session.id_role)
+    setIsAdmin(role === 1)
+    setIsTeacher(role === 3)
+
+    // 2. Cargar Datos
     const initData = async () => {
       try {
         setLoading(true)
@@ -117,66 +106,88 @@ const Users = () => {
         setRoles(rolesRes.data || [])
         setGrados(gradosRes.data || [])
 
-        await fetchUsuarios(gradosRes.data || [])
+        // Pasamos la sesión para filtrar correctamente desde el inicio
+        await fetchUsuarios(gradosRes.data || [], session)
       } catch (err) {
-        console.error('Error inicializando datos:', err)
-        setAlertData({ type: 'danger', response: { message: 'Error de conexión con Supabase' } })
+        console.error('Error init:', err)
+        setAlertData({ type: 'danger', response: { message: 'Error de conexión' } })
       } finally {
         setLoading(false)
       }
     }
-
     initData()
   }, [])
 
+  const fetchUsuarios = async (currentGrados, sessionUser) => {
+    try {
+      setLoading(true)
+      const userSession = sessionUser || currentUser;
+      if (!userSession) return;
+
+      const roleId = Number(userSession.id_role)
+      
+      // Consulta base: traer usuarios con sus relaciones
+      let query = supabase.from('usuarios').select(`
+          *,
+          estudiantes!left (id, id_grado),
+          docente!left (id, id_usuario, docente_grados (id, id_grado))
+        `).order('fecha_registro', { ascending: false })
+
+      // Seguridad básica: Estudiantes no ven nada
+      if (roleId === 2) { 
+         setUsuarios([])
+         return
+      }
+      
+      const { data, error } = await query
+      if (error) throw error
+
+      let filteredUsers = data || []
+
+      // --- 1. FILTRO DE VISUALIZACIÓN (READ) ---
+      if (roleId === 3) { // DOCENTE
+        const teacherGrade = Number(userSession.id_grado)
+        
+        filteredUsers = filteredUsers.filter(u => {
+            const uRole = Number(u.id_role)
+            // Solo ver Estudiantes (Rol 2)
+            if (uRole !== 2) return false;
+            
+            // Solo ver estudiantes del mismo grado
+            const studentGrade = u.estudiantes?.[0]?.id_grado
+            return Number(studentGrade) === teacherGrade
+        })
+      }
+      // ADMIN ve todo
+
+      setUsuarios(filteredUsers)
+      // Usamos currentGrados si se pasa, sino el estado 'grados'
+      await fetchGradosUsuarios(filteredUsers, Array.isArray(currentGrados) ? currentGrados : grados)
+
+    } catch (err) {
+      console.error(err)
+      setAlertData({ type: 'danger', response: { message: 'Error al cargar usuarios' } })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const fetchGradosUsuarios = async (usuariosList, listaGrados) => {
     try {
-      const gradosReference = Array.isArray(listaGrados) ? listaGrados : (Array.isArray(grados) ? grados : [])
-
-      const [docenteRes, docenteGradosRes, estudiantesRes] = await Promise.all([
-        supabase.from('docente').select('*'),
-        supabase.from('docente_grados').select('*'),
-        supabase.from('estudiantes').select('*'),
-      ])
-
-      if (docenteRes.error) throw docenteRes.error
-      if (docenteGradosRes.error) throw docenteGradosRes.error
-      if (estudiantesRes.error) throw estudiantesRes.error
-
-      const docentes = Array.isArray(docenteRes.data) ? docenteRes.data : []
-      const docenteGrados = Array.isArray(docenteGradosRes.data) ? docenteGradosRes.data : []
-      const estudiantes = Array.isArray(estudiantesRes.data) ? estudiantesRes.data : []
-      const usuariosArr = Array.isArray(usuariosList) ? usuariosList : []
-
       const map = {}
-      usuariosArr.forEach((u) => {
-        const role = Number(u.id_role)
-        if (role === 3) { // docente
-          const d = docentes.find((doc) => String(doc.id_usuario) === String(u.id))
-          if (d) {
-            const rel = docenteGrados.filter((r) => r.id_docente === d.id)
-            map[u.id] = rel
-              .map((r) => {
-                const g = gradosReference.find((gr) => Number(gr.id) === Number(r.id_grado))
-                return g ? `Grado ${g.nombre}` : null
-              })
-              .filter(Boolean)
+      usuariosList.forEach(u => {
+          if (Number(u.id_role) === 2 && u.estudiantes?.[0]) {
+              const gid = u.estudiantes[0].id_grado
+              const gName = listaGrados.find(g => g.id === gid)?.nombre
+              map[u.id] = gName ? [`Grado ${gName}`] : []
+          } else if (Number(u.id_role) === 3 && u.docente?.[0]?.docente_grados) {
+              const gids = u.docente[0].docente_grados.map(dg => dg.id_grado)
+              const gNames = gids.map(gid => listaGrados.find(g => g.id === gid)?.nombre).filter(Boolean)
+              map[u.id] = gNames.map(n => `Grado ${n}`)
           } else {
-            map[u.id] = []
+              map[u.id] = []
           }
-        } else if (role === 2) { // estudiante
-          const est = estudiantes.find((e) => String(e.id_usuario) === String(u.id))
-          if (est) {
-            const g = gradosReference.find((gr) => Number(gr.id) === Number(est.id_grado))
-            map[u.id] = g ? [`Grado ${g.nombre}`] : []
-          } else {
-            map[u.id] = []
-          }
-        } else {
-          map[u.id] = []
-        }
       })
-
       setGradosPorUsuario(map)
     } catch (err) {
       console.error('Error al cargar grados por usuario:', err)
@@ -186,6 +197,21 @@ const Users = () => {
 
   /* ================= HELPERS & HANDLERS ================= */
 
+  const handleOpenAdd = () => {
+      setNewUser({
+        nombre: '', apellido: '', cedula: '', email: '', password: '', telefono: '', 
+        id_role: isTeacher ? '2' : '', // Si es docente, fuerza rol Estudiante
+      })
+      // Si es docente, fuerza su grado
+      if (isTeacher) {
+          setGradosSeleccionados([Number(currentUser.id_grado)])
+      } else {
+          setGradosSeleccionados([])
+      }
+      setFormErrors({})
+      setAddModal(true)
+  }
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setNewUser({ ...newUser, [name]: value })
@@ -194,7 +220,8 @@ const Users = () => {
       delete copy[name]
       setFormErrors(copy)
     }
-    if (name === 'id_role') {
+    // Solo admin limpia grados al cambiar rol
+    if (name === 'id_role' && isAdmin) {
       setGradosSeleccionados([])
     }
   }
@@ -206,9 +233,6 @@ const Users = () => {
       const copy = { ...formErrors }
       delete copy[name]
       setFormErrors(copy)
-    }
-    if (name === 'id_role') {
-      setGradosSeleccionados([])
     }
   }
 
@@ -233,6 +257,20 @@ const Users = () => {
 
   /* ================= CREATE ================= */
   const handleCreate = async () => {
+    // --- 2. VALIDACIÓN DE SEGURIDAD (CREAR) ---
+    const targetRole = Number(newUser.id_role)
+    
+    if (isTeacher) {
+        if (targetRole !== 2) {
+            setAlertData({type: 'danger', response: {message: 'No tienes permisos para crear este rol.'}})
+            return
+        }
+        if (!gradosSeleccionados.includes(Number(currentUser.id_grado))) {
+             setAlertData({type: 'danger', response: {message: 'Solo puedes asignar estudiantes a tu propio grado.'}})
+             return
+        }
+    }
+
     try {
       setAlertData(null)
       setFormErrors({})
@@ -266,7 +304,7 @@ const Users = () => {
         return
       }
 
-      // Additional role-specific checks (business rules)
+      // Additional role-specific checks
       if (roleId === 2 && (!gradosSeleccionados || gradosSeleccionados.length !== 1)) {
         setAlertData({ type: 'danger', response: { message: 'Seleccione exactamente un grado para el estudiante' } })
         setIsSubmitting(false)
@@ -278,10 +316,9 @@ const Users = () => {
         return
       }
 
-      // Generador de UUID (usa crypto.randomUUID si está disponible)
+      // Generador de UUID
       const genUUID = () => {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
-        // Fallback simple (RFC4122 v4-like)
         const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1)
         return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`
       }
@@ -322,7 +359,7 @@ const Users = () => {
 
       setAddModal(false)
       resetForm()
-      await fetchUsuarios()
+      await fetchUsuarios(grados, currentUser)
       setAlertData({ type: 'success', response: { message: 'Usuario creado exitosamente' } })
     } catch (err) {
       console.error('Error al crear usuario:', err)
@@ -334,6 +371,14 @@ const Users = () => {
 
   /* ================= EDIT ================= */
   const handleEdit = async (user) => {
+    // --- 3. VALIDACIÓN DE SEGURIDAD (EDITAR) ---
+    if (isTeacher) {
+        if (Number(user.id_role) !== 2) {
+            setAlertData({type: 'warning', response: {message: 'Acceso denegado.'}})
+            return
+        }
+    }
+
     try {
       setUserToEdit({ ...user })
       setGradosSeleccionados([])
@@ -384,7 +429,6 @@ const Users = () => {
       }
       if (roleId === 2 || roleId === 3) payload.grados = gradosSeleccionados
 
-      // Choose schema: omit grados validation for admins (role 1)
       const schema = roleId === 1 ? updateUserSchema.omit({ grados: true }) : updateUserSchema
       const parsed = schema.safeParse(payload)
       if (!parsed.success) {
@@ -398,7 +442,6 @@ const Users = () => {
         return
       }
 
-      // Business rules for grados (give inline feedback)
       if (roleId === 2 && (!gradosSeleccionados || gradosSeleccionados.length !== 1)) {
         setFormErrors({ grados: 'Seleccione exactamente un grado para el estudiante' })
         setIsSubmitting(false)
@@ -425,43 +468,47 @@ const Users = () => {
 
       const id_usuario = userToEdit.id
 
-      if (roleId === 3) {
-        let docQ = await supabase.from('docente').select('*').eq('id_usuario', id_usuario)
-        if (docQ.error) throw docQ.error
-        let id_docente
-        if (docQ.data.length === 0) {
-          const insDoc = await supabase.from('docente').insert([{ id_usuario }]).select().single()
-          if (insDoc.error) throw insDoc.error
-          id_docente = insDoc.data.id
-        } else {
-          id_docente = docQ.data[0].id
-          const delP = await supabase.from('docente_grados').delete().eq('id_docente', id_docente)
-          if (delP.error) throw delP.error
-        }
-        if (gradosSeleccionados.length) {
-          const pivots = gradosSeleccionados.map(gid => ({ id_docente, id_grado: gid }))
-          const pivIns = await supabase.from('docente_grados').insert(pivots)
-          if (pivIns.error) throw pivIns.error
-        }
-      }
+      // Si es docente, NO dejamos que cambie el grado del estudiante (se mantiene el original)
+      // Solo el Admin puede reasignar grados en edición.
+      if (!isTeacher) {
+          if (roleId === 3) {
+            let docQ = await supabase.from('docente').select('*').eq('id_usuario', id_usuario)
+            if (docQ.error) throw docQ.error
+            let id_docente
+            if (docQ.data.length === 0) {
+              const insDoc = await supabase.from('docente').insert([{ id_usuario }]).select().single()
+              if (insDoc.error) throw insDoc.error
+              id_docente = insDoc.data.id
+            } else {
+              id_docente = docQ.data[0].id
+              const delP = await supabase.from('docente_grados').delete().eq('id_docente', id_docente)
+              if (delP.error) throw delP.error
+            }
+            if (gradosSeleccionados.length) {
+              const pivots = gradosSeleccionados.map(gid => ({ id_docente, id_grado: gid }))
+              const pivIns = await supabase.from('docente_grados').insert(pivots)
+              if (pivIns.error) throw pivIns.error
+            }
+          }
 
-      if (roleId === 2) {
-        const estQ = await supabase.from('estudiantes').select('*').eq('id_usuario', id_usuario)
-        if (estQ.error) throw estQ.error
-        if (estQ.data.length === 0) {
-          const ins = await supabase.from('estudiantes').insert([{ id_usuario, id_grado: gradosSeleccionados[0] }])
-          if (ins.error) throw ins.error
-        } else {
-          const updEst = await supabase.from('estudiantes').update({ id_grado: gradosSeleccionados[0] }).eq('id', estQ.data[0].id)
-          if (updEst.error) throw updEst.error
-        }
+          if (roleId === 2) {
+            const estQ = await supabase.from('estudiantes').select('*').eq('id_usuario', id_usuario)
+            if (estQ.error) throw estQ.error
+            if (estQ.data.length === 0) {
+              const ins = await supabase.from('estudiantes').insert([{ id_usuario, id_grado: gradosSeleccionados[0] }])
+              if (ins.error) throw ins.error
+            } else {
+              const updEst = await supabase.from('estudiantes').update({ id_grado: gradosSeleccionados[0] }).eq('id', estQ.data[0].id)
+              if (updEst.error) throw updEst.error
+            }
+          }
       }
 
       setEditModal(false)
       setUserToEdit(null)
       setGradosSeleccionados([])
       setFormErrors({})
-      await fetchUsuarios()
+      await fetchUsuarios(grados, currentUser)
       setAlertData({ type: 'success', response: { message: 'Usuario actualizado exitosamente' } })
     } catch (err) {
       console.error('Error edit:', err)
@@ -476,6 +523,10 @@ const Users = () => {
 
   /* ================= DELETE ================= */
   const handleDeleteClick = (user) => {
+    // --- 4. VALIDACIÓN DE SEGURIDAD (ELIMINAR) ---
+    if (isTeacher) {
+        if (Number(user.id_role) !== 2) return;
+    }
     setUserToDelete(user)
     setDeleteModal(true)
   }
@@ -486,63 +537,30 @@ const Users = () => {
     try {
       setIsSubmitting(true)
       
-      // 1. Primero, manejar las relaciones dependiendo del rol
       const roleId = Number(userToDelete.id_role)
       
       if (roleId === 3) { // Docente
-        // Buscar el registro del docente
-        const docenteRes = await supabase
-          .from('docente')
-          .select('*')
-          .eq('id_usuario', userToDelete.id)
-          .single()
-        
+        const docenteRes = await supabase.from('docente').select('*').eq('id_usuario', userToDelete.id).single()
         if (docenteRes.data) {
-          // Eliminar las relaciones con grados primero
-          await supabase
-            .from('docente_grados')
-            .delete()
-            .eq('id_docente', docenteRes.data.id)
-          
-          // Luego eliminar el registro del docente
-          await supabase
-            .from('docente')
-            .delete()
-            .eq('id', docenteRes.data.id)
+          await supabase.from('docente_grados').delete().eq('id_docente', docenteRes.data.id)
+          await supabase.from('docente').delete().eq('id', docenteRes.data.id)
         }
       }
       
       if (roleId === 2) { // Estudiante
-        // Eliminar el registro del estudiante
-        await supabase
-          .from('estudiantes')
-          .delete()
-          .eq('id_usuario', userToDelete.id)
+        await supabase.from('estudiantes').delete().eq('id_usuario', userToDelete.id)
       }
       
-      // 2. Finalmente, eliminar el usuario principal
-      const { error } = await supabase
-        .from('usuarios')
-        .delete()
-        .eq('id', userToDelete.id)
+      const { error } = await supabase.from('usuarios').delete().eq('id', userToDelete.id)
       
       if (error) throw error
       
-      // 3. Mostrar éxito
-      setAlertData({ 
-        type: 'success', 
-        response: { message: 'Usuario eliminado correctamente' } 
-      })
-      
-      // 4. Cerrar modal y actualizar lista
+      setAlertData({ type: 'success', response: { message: 'Usuario eliminado correctamente' } })
       setDeleteModal(false)
-      
-      // Actualizar la lista local inmediatamente
       setUsuarios(prevUsuarios => 
         prevUsuarios.filter(user => user.id !== userToDelete.id)
       )
       
-      // También actualizar gradosPorUsuario
       setGradosPorUsuario(prev => {
         const copy = { ...prev }
         delete copy[userToDelete.id]
@@ -575,9 +593,10 @@ const Users = () => {
       </div>
 
       <div className="d-flex justify-content-end mb-3">
-        <CButton color="primary" onClick={() => setAddModal(true)}>
+        <CButton color="primary" onClick={handleOpenAdd}>
           <CIcon icon={cilUserPlus} className="me-2" />
-          Crear usuario
+          {/* Texto dinámico según rol */}
+          {isTeacher ? 'Inscribir Estudiante' : 'Crear usuario'}
         </CButton>
       </div>
 
@@ -611,22 +630,29 @@ const Users = () => {
                       : <span className="text-muted small">—</span>}
                   </CTableDataCell>
                   <CTableDataCell>
-                    <CButton size="sm" color="info" className="me-1 text-white" onClick={() => handleViewDetails(user)}>
-                      <CIcon icon={cilSearch} />
-                    </CButton>
-                    <CButton size="sm" color="primary" className="me-1" onClick={() => handleEdit(user)}>
-                      <CIcon icon={cilPencil} />
-                    </CButton>
-                    <CButton 
-                      size="sm" 
-                      color="danger" 
-                      className="text-white"
-                      onClick={() => handleDeleteClick(user)}
-                      disabled={Number(user.id_role) === 1} 
-                      title={Number(user.id_role) === 1 ? "No se pueden eliminar administradores" : ""}
-                    >
-                      <CIcon icon={cilTrash} />
-                    </CButton>
+                    <div className="d-flex gap-2">
+                        <CButton size="sm" color="info" className="text-white" onClick={() => handleViewDetails(user)}>
+                        <CIcon icon={cilSearch} />
+                        </CButton>
+                        
+                        {/* BOTONES EDITAR/ELIMINAR: VISIBLES SOLO SEGÚN PERMISOS */}
+                        {(isAdmin || (isTeacher && Number(user.id_role) === 2)) && (
+                            <>
+                                <CButton size="sm" color="primary" onClick={() => handleEdit(user)}>
+                                    <CIcon icon={cilPencil} />
+                                </CButton>
+                                <CButton 
+                                    size="sm" 
+                                    color="danger" 
+                                    className="text-white"
+                                    onClick={() => handleDeleteClick(user)}
+                                    disabled={Number(user.id_role) === 1} 
+                                >
+                                    <CIcon icon={cilTrash} />
+                                </CButton>
+                            </>
+                        )}
+                    </div>
                   </CTableDataCell>
                 </CTableRow>
               ))}
@@ -638,7 +664,7 @@ const Users = () => {
       {/* MODAL CREAR USUARIO */}
       <CModal visible={addModal} backdrop = "static" onClose={() => { setAddModal(false); resetForm(); }}>
         <CModalHeader closeButton = {false}>
-          <CModalTitle>Crear Nuevo Usuario</CModalTitle>
+          <CModalTitle>{isTeacher ? 'Inscribir Estudiante' : 'Crear Nuevo Usuario'}</CModalTitle>
         </CModalHeader>
         <CModalBody>
           <AlertMessage response={alertData?.response} type={alertData?.type} onClose={() => setAlertData(null)} />
@@ -650,44 +676,58 @@ const Users = () => {
             <div className="mb-3"><CFormLabel>Contraseña *</CFormLabel><CFormInput type="password" name="password" value={newUser.password} onChange={handleChange} required invalid={!!formErrors.password} feedback={formErrors.password} /></div>
             <div className="mb-3"><CFormLabel>Teléfono</CFormLabel><CFormInput name="telefono" value={newUser.telefono} onChange={handleChange} invalid={!!formErrors.telefono} feedback={formErrors.telefono} /></div>
 
-            <div className="mb-3">
-              <CFormLabel>Rol *</CFormLabel>
-              <CFormSelect name="id_role" value={String(newUser.id_role)} onChange={handleChange} required invalid={!!formErrors.id_role} feedback={formErrors.id_role}>
-                <option value="">Seleccione un rol</option>
-                {roles.map((rol) => (
-                  <option key={rol.id} value={String(rol.id)}>
-                    {rol.nombre_rol}
-                  </option>
-                ))}
-              </CFormSelect>
-            </div>
-
-            {Number(newUser.id_role) === 2 && (
-              <div className="mb-3">
-                <CFormLabel>Grado (Estudiante) *</CFormLabel>
-                <CFormSelect value={gradosSeleccionados[0] || ''} onChange={handleGradoChange} required invalid={!!formErrors.grados} feedback={formErrors.grados}>
-                  <option value="" disabled>Seleccione...</option>
-                  {grados.map((grado) => (
-                    <option key={grado.id} value={grado.id}>
-                      Grado {grado.nombre}
+            {/* Selector ROL: Solo visible para Admin */}
+            {isAdmin && (
+                <div className="mb-3">
+                <CFormLabel>Rol *</CFormLabel>
+                <CFormSelect name="id_role" value={String(newUser.id_role)} onChange={handleChange} required invalid={!!formErrors.id_role} feedback={formErrors.id_role}>
+                    <option value="">Seleccione un rol</option>
+                    {roles.map((rol) => (
+                    <option key={rol.id} value={String(rol.id)}>
+                        {rol.nombre_rol}
                     </option>
-                  ))}
+                    ))}
                 </CFormSelect>
-              </div>
+                </div>
             )}
 
-            {Number(newUser.id_role) === 3 && (
-              <div className="mb-3">
-                <CFormLabel>Grados (Docente) *</CFormLabel>
-                <CFormSelect multiple value={gradosSeleccionados} onChange={handleGradoChange} required style={{ height: '120px' }} invalid={!!formErrors.grados} feedback={formErrors.grados}>
-                  {grados.map((grado) => (
-                    <option key={grado.id} value={grado.id}>
-                      Grado {grado.nombre}
-                    </option>
-                  ))}
-                </CFormSelect>
-                <small className="text-muted d-block mt-1">Ctrl + Click para seleccionar múltiples</small>
-              </div>
+            {/* GRADOS (VISTA DOCENTE: AUTO-ASIGNADO) */}
+            {isTeacher ? (
+                <div className="mb-3">
+                    <CFormLabel>Grado Asignado</CFormLabel>
+                    <CFormInput value={`Grado ${currentUser?.id_grado}`} disabled readOnly />
+                    <small className="text-muted">El estudiante se registrará automáticamente en tu grado.</small>
+                </div>
+            ) : (
+                // GRADOS (VISTA ADMIN: SELECTOR)
+                <>
+                    {Number(newUser.id_role) === 2 && (
+                    <div className="mb-3">
+                        <CFormLabel>Grado (Estudiante) *</CFormLabel>
+                        <CFormSelect value={gradosSeleccionados[0] || ''} onChange={handleGradoChange} required invalid={!!formErrors.grados} feedback={formErrors.grados}>
+                        <option value="" disabled>Seleccione...</option>
+                        {grados.map((grado) => (
+                            <option key={grado.id} value={grado.id}>
+                            Grado {grado.nombre}
+                            </option>
+                        ))}
+                        </CFormSelect>
+                    </div>
+                    )}
+
+                    {Number(newUser.id_role) === 3 && (
+                    <div className="mb-3">
+                        <CFormLabel>Grados (Docente) *</CFormLabel>
+                        <CFormSelect multiple value={gradosSeleccionados} onChange={handleGradoChange} required style={{ height: '120px' }} invalid={!!formErrors.grados} feedback={formErrors.grados}>
+                        {grados.map((grado) => (
+                            <option key={grado.id} value={grado.id}>
+                            Grado {grado.nombre}
+                            </option>
+                        ))}
+                        </CFormSelect>
+                    </div>
+                    )}
+                </>
             )}
           </CForm>
         </CModalBody>
@@ -711,17 +751,29 @@ const Users = () => {
                 <div className="mb-3"><CFormLabel>Contraseña (opcional)</CFormLabel><CFormInput type="password" name="password" value={userToEdit.password || ''} onChange={handleEditChange} placeholder="Dejar vacío para mantener actual" invalid={!!formErrors.password} feedback={formErrors.password} /></div>
                 <div className="mb-3"><CFormLabel>Teléfono</CFormLabel><CFormInput name="telefono" value={userToEdit.telefono || ''} onChange={handleEditChange} invalid={!!formErrors.telefono} feedback={formErrors.telefono} /></div>
 
-              <div className="mb-3">
-                <CFormLabel>Rol *</CFormLabel>
-                <CFormSelect name="id_role" value={String(userToEdit.id_role || '')} onChange={handleEditChange} required invalid={!!formErrors.id_role} feedback={formErrors.id_role}>
-                  <option value="">Seleccione un rol</option>
-                  {roles.map((rol) => (
-                    <option key={rol.id} value={String(rol.id)}>{rol.nombre_rol}</option>
-                  ))}
-                </CFormSelect>
-              </div>
+              {/* Roles y Grados: Solo Admin puede editar esto */}
+              {isAdmin && (
+                  <div className="mb-3">
+                    <CFormLabel>Rol *</CFormLabel>
+                    <CFormSelect name="id_role" value={String(userToEdit.id_role || '')} onChange={handleEditChange} required invalid={!!formErrors.id_role} feedback={formErrors.id_role}>
+                        <option value="">Seleccione un rol</option>
+                        {roles.map((rol) => (
+                        <option key={rol.id} value={String(rol.id)}>{rol.nombre_rol}</option>
+                        ))}
+                    </CFormSelect>
+                  </div>
+              )}
 
-              {Number(userToEdit.id_role) === 2 && (
+              {/* Si es docente editando, mostramos el grado solo lectura */}
+              {isTeacher && (
+                  <div className="mb-3">
+                    <CFormLabel>Grado</CFormLabel>
+                    <CFormInput value={`Grado ${currentUser?.id_grado}`} disabled />
+                  </div>
+              )}
+
+              {/* Selector Grados (Admin) */}
+              {isAdmin && Number(userToEdit.id_role) === 2 && (
                 <div className="mb-3">
                   <CFormLabel>Grado (Estudiante) *</CFormLabel>
                   <CFormSelect value={gradosSeleccionados[0] || ''} onChange={handleGradoChange} required invalid={!!formErrors.grados} feedback={formErrors.grados}>
@@ -731,7 +783,7 @@ const Users = () => {
                 </div>
               )}
 
-              {Number(userToEdit.id_role) === 3 && (
+              {isAdmin && Number(userToEdit.id_role) === 3 && (
                 <div className="mb-3">
                   <CFormLabel>Grados (Docente) *</CFormLabel>
                   <CFormSelect multiple value={gradosSeleccionados} onChange={handleGradoChange} required style={{ height: '120px' }} invalid={!!formErrors.grados} feedback={formErrors.grados}>

@@ -112,7 +112,7 @@ const Dashboard = () => {
 
   return (
     <div className="p-3">
-      <h2 className="mb-4 text-primary fw-bold">Dashboard Educativo</h2>
+      <h2 className="mb-4 text-primary text-white fw-bold">Dashboard Educativo</h2>
 
       {/* Tarjetas de Estadísticas */}
       <CRow className="mb-4">

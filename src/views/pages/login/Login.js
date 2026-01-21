@@ -9,7 +9,6 @@ import {
   CSpinner,
   CAlert
 } from '@coreui/react'
-// Importamos el cliente de supabase en lugar de axios
 import { supabase } from '../../../lib/supabase' 
 import AnimatedMonster from '../../../components/AnimatedMonster'
 import './Login.css'
@@ -54,8 +53,9 @@ const Login = () => {
     setStatus({ loading: true, error: '', success: '' })
 
     try {
-      // 1. CONSULTA A SUPABASE
-      // Buscamos el usuario por email y traemos los datos necesarios
+      // ---------------------------------------------------------
+      // 1. CONSULTA BASE: Tabla 'usuarios'
+      // ---------------------------------------------------------
       const { data: users, error } = await supabase
         .from('usuarios')
         .select('*')
@@ -70,34 +70,84 @@ const Login = () => {
 
       const user = users[0]
 
-      // 2. VALIDACIÓN DE CONTRASEÑA
+      // Validación de contraseña (texto plano según tu esquema actual)
       if (user.password !== formData.password) {
         throw new Error('Credenciales inválidas')
       }
 
-      // 3. MAPEO DE ROLES
+      // ---------------------------------------------------------
+      // 2. BUSCAR EL GRADO SEGÚN EL ROL
+      // ---------------------------------------------------------
+      let gradoEncontrado = null;
+      const roleId = Number(user.id_role); // Aseguramos que sea número
+
+      // --- CASO A: ESTUDIANTE (Rol 2) ---
+      if (roleId === 2) {
+        // Buscamos en tabla 'estudiantes' usando id_usuario
+        const { data: datosEstudiante, error: errEst } = await supabase
+          .from('estudiantes')
+          .select('id_grado')
+          .eq('id_usuario', user.id)
+          .maybeSingle()
+        
+        if (!errEst && datosEstudiante) {
+            gradoEncontrado = datosEstudiante.id_grado;
+        }
+      } 
+      // --- CASO B: DOCENTE (Rol 3) ---
+      else if (roleId === 3) {
+        // PASO B.1: Buscar el ID de perfil en la tabla 'docente'
+        const { data: perfilDocente, error: errPerfil } = await supabase
+            .from('docente') // Según tu esquema es singular
+            .select('id')
+            .eq('id_usuario', user.id)
+            .maybeSingle()
+
+        if (!errPerfil && perfilDocente) {
+            // PASO B.2: Buscar el grado en la tabla intermedia 'docente_grados'
+            // Nota: Si un docente tiene varios grados, aquí tomamos el PRIMERO (.limit(1))
+            // para asignarlo como su contexto actual.
+            const { data: relacionGrado, error: errGrado } = await supabase
+                .from('docente_grados')
+                .select('id_grado')
+                .eq('id_docente', perfilDocente.id)
+                .limit(1) // Tomamos el primero
+                .maybeSingle()
+
+            if (!errGrado && relacionGrado) {
+                gradoEncontrado = relacionGrado.id_grado;
+            }
+        }
+      }
+
+      // ---------------------------------------------------------
+      // 3. CONSTRUIR OBJETO DE SESIÓN
+      // ---------------------------------------------------------
       const roleMap = {
         1: 'admin',
         2: 'student',
         3: 'teacher',
       }
 
-      // Estructura de datos para mantener compatibilidad con el resto de tu app
       const userData = {
-        id_usuario: user.id || user.id_usuario,
-        id: user.id || user.id_usuario,
+        id_usuario: user.id, // ID en tabla usuarios (PK)
+        id: user.id,         // Redundancia útil para el frontend
         nombre: user.nombre || '',
         apellido: user.apellido || '',
         email: user.email || '',
         telefono: user.telefono || '',
         id_role: user.id_role,
-        role: roleMap[user.id_role] || 'student'
+        role: roleMap[user.id_role] || 'student',
+        // AQUÍ GUARDAMOS EL GRADO OBTENIDO
+        id_grado: gradoEncontrado 
       }
+      
+      console.log("Datos de sesión guardados:", userData); // Para depuración
 
-    // ... (código anterior igual)
-
-      // 4. GESTIÓN DE SESIÓN
-      const SESSION_DURATION = 1000 * 60 * 60 * 8 
+      // ---------------------------------------------------------
+      // 4. GUARDAR Y REDIRIGIR
+      // ---------------------------------------------------------
+      const SESSION_DURATION = 1000 * 60 * 60 * 8 // 8 horas
       const authData = {
         token: `supabase-auth-${userData.id}-${Date.now()}`,
         expiresAt: Date.now() + SESSION_DURATION,
@@ -114,19 +164,16 @@ const Login = () => {
         success: '¡Inicio de sesión exitoso! Redirigiendo...'
       })
 
-      // LOGICA DE REDIRECCIÓN CONDICIONAL
       setTimeout(() => {
-        // Si el rol es 2 (Student), va a /content, si no, va a /dashboard
-        // Asegúrate de que user.id_role sea un número
-        if (Number(user.id_role) === 2) {
-            navigate('/content', { replace: true })
+        if (Number(userData.id_role) === 2) {
+          navigate('/content', { replace: true })
         } else {
-            navigate('/dashboard', { replace: true }) // Admin y Docente
+          navigate('/dashboard', { replace: true })
         }
       }, 1500)
 
-
     } catch (error) {
+      console.error("Error en login:", error)
       setStatus({
         loading: false,
         error: error.message || 'Error al conectar con el servidor',

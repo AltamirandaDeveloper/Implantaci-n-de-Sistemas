@@ -93,7 +93,7 @@ body {
   border-right: none;
 }
 
-// Estilos específicos para el título "MÓDULOS" que centramos antes
+
 .sidebar-nav .nav-title {
   color: rgba(255, 255, 255, 0.5) !important; // Un blanco muy tenue
   font-weight: 700;
@@ -101,7 +101,6 @@ body {
   letter-spacing: 1px;
 }
 
-// Aseguramos que los iconos cambien a blanco al hacer hover
 .sidebar-nav .nav-link:hover .nav-icon {
   color: #ffffff !important;
 }
